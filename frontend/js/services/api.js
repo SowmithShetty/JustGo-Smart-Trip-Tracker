@@ -2,7 +2,7 @@
  * API Service — HTTP client wrapper for the JustGo backend.
  */
 
-const API_BASE = window.JUSTGO_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /** Get stored JWT token */
 function getToken() {
