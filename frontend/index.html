@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="JustGo — Smart GPS trip tracker with real-time mapping, speed analysis, and contextual insights. Track walks, runs, and drives." />
+    <title>JustGo — Smart Trip Tracker</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="/styles/main.css" />
+    <link rel="stylesheet" href="/styles/components.css" />
+</head>
+<body>
+    <!-- ── Navigation ──────────────────────────────── -->
+    <nav id="main-nav" class="nav-bar">
+        <div class="nav-brand">
+            <div class="nav-logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <circle cx="14" cy="14" r="13" stroke="url(#logoGrad)" stroke-width="2"/>
+                    <path d="M14 4 L14 14 L21 21" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <defs>
+                        <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                            <stop offset="0%" stop-color="#6C5CE7"/>
+                            <stop offset="100%" stop-color="#A78BFA"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <span class="nav-title">JustGo</span>
+        </div>
+        <div class="nav-links">
+            <a href="#/" class="nav-link active" data-page="home" id="nav-home">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="#/history" class="nav-link" data-page="history" id="nav-history">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>History</span>
+            </a>
+            <a href="#/profile" class="nav-link" data-page="profile" id="nav-profile">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Profile</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- ── Main Content ────────────────────────────── -->
+    <main id="app-content" class="app-content">
+        <!-- Pages render here dynamically -->
+    </main>
+
+    <!-- ── Auth Modal ──────────────────────────────── -->
+    <div id="auth-modal" class="modal-overlay" style="display:none;">
+        <div class="modal glass-card">
+            <div class="modal-header">
+                <h2 id="auth-modal-title">Welcome to JustGo</h2>
+                <p class="text-secondary">Track your journeys intelligently</p>
+            </div>
+            <form id="auth-form" class="auth-form">
+                <div id="auth-username-group" class="form-group">
+                    <label for="auth-username">Username</label>
+                    <input type="text" id="auth-username" placeholder="explorer123" autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label for="auth-email">Email</label>
+                    <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" />
+                </div>
+                <div class="form-group">
+                    <label for="auth-password">Password</label>
+                    <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
+                </div>
+                <button type="submit" id="auth-submit-btn" class="btn btn-primary btn-full">
+                    Create Account
+                </button>
+                <p class="auth-toggle text-secondary">
+                    <span id="auth-toggle-text">Already have an account?</span>
+                    <a href="#" id="auth-toggle-link">Sign In</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── Scripts ─────────────────────────────────── -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>
