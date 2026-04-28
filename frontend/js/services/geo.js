@@ -58,6 +58,8 @@ export class GeoTracker {
         this.points = [];
         this.startTime = null;
         this.paused = false;
+        this.pausedAt = null;        // timestamp when pause began
+        this.totalPausedMs = 0;      // accumulated paused milliseconds
         this.totalDistance = 0;
         this.currentSpeed = 0;
     }
@@ -72,6 +74,8 @@ export class GeoTracker {
         this.points = [];
         this.totalDistance = 0;
         this.currentSpeed = 0;
+        this.totalPausedMs = 0;
+        this.pausedAt = null;
 
         this.watchId = navigator.geolocation.watchPosition(
             (pos) => this._handlePosition(pos),
@@ -87,14 +91,26 @@ export class GeoTracker {
     }
 
     pause() {
-        this.paused = true;
+        if (!this.paused) {
+            this.paused = true;
+            this.pausedAt = Date.now();
+        }
     }
 
     resume() {
+        if (this.paused && this.pausedAt) {
+            this.totalPausedMs += Date.now() - this.pausedAt;
+            this.pausedAt = null;
+        }
         this.paused = false;
     }
 
     stop() {
+        // If stopping while paused, account for the remaining pause duration
+        if (this.paused && this.pausedAt) {
+            this.totalPausedMs += Date.now() - this.pausedAt;
+            this.pausedAt = null;
+        }
         if (this.watchId !== null) {
             navigator.geolocation.clearWatch(this.watchId);
             this.watchId = null;
@@ -110,7 +126,8 @@ export class GeoTracker {
 
     getElapsed() {
         if (!this.startTime) return 0;
-        return Math.floor((Date.now() - this.startTime.getTime()) / 1000);
+        const now = this.paused && this.pausedAt ? this.pausedAt : Date.now();
+        return Math.floor((now - this.startTime.getTime() - this.totalPausedMs) / 1000);
     }
 
     _handlePosition(pos) {

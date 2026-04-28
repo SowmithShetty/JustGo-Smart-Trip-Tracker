@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
-import aiosqlite
+import asyncpg
 
 from database import get_db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse
@@ -42,7 +42,7 @@ def create_token(user_id: int) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def get_current_user(db: aiosqlite.Connection = Depends(get_db)):
+async def get_current_user(db: asyncpg.Connection = Depends(get_db)):
     """
     This is a dependency placeholder. The actual token extraction
     happens in each endpoint via the Authorization header.
@@ -75,14 +75,13 @@ def extract_token(authorization: str) -> int:
 # ── Routes ───────────────────────────────────────────────
 
 @router.post("/register", response_model=TokenResponse)
-async def register(data: UserCreate, db: aiosqlite.Connection = Depends(get_db)):
+async def register(data: UserCreate, db: asyncpg.Connection = Depends(get_db)):
     """Create a new user account."""
     # Check if email or username already exists
-    cursor = await db.execute(
-        "SELECT id FROM users WHERE email = ? OR username = ?",
-        (data.email, data.username)
+    existing = await db.fetchrow(
+        "SELECT id FROM users WHERE email = $1 OR username = $2",
+        data.email, data.username
     )
-    existing = await cursor.fetchone()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -90,18 +89,12 @@ async def register(data: UserCreate, db: aiosqlite.Connection = Depends(get_db))
         )
 
     hashed = hash_password(data.password)
-    cursor = await db.execute(
-        "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-        (data.username, data.email, hashed)
+    user = await db.fetchrow(
+        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING *",
+        data.username, data.email, hashed
     )
-    await db.commit()
-    user_id = cursor.lastrowid
 
-    # Fetch the created user
-    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    user = await cursor.fetchone()
-
-    token = create_token(user_id)
+    token = create_token(user["id"])
 
     return TokenResponse(
         access_token=token,
@@ -117,12 +110,11 @@ async def register(data: UserCreate, db: aiosqlite.Connection = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin, db: aiosqlite.Connection = Depends(get_db)):
+async def login(data: UserLogin, db: asyncpg.Connection = Depends(get_db)):
     """Login with email and password."""
-    cursor = await db.execute(
-        "SELECT * FROM users WHERE email = ?", (data.email,)
+    user = await db.fetchrow(
+        "SELECT * FROM users WHERE email = $1", data.email
     )
-    user = await cursor.fetchone()
 
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(
@@ -148,15 +140,12 @@ async def login(data: UserLogin, db: aiosqlite.Connection = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     authorization: str = "",
-    db: aiosqlite.Connection = Depends(get_db)
+    db: asyncpg.Connection = Depends(get_db)
 ):
     """Get current user from JWT token."""
-    from fastapi import Header
-    # This will be called with the header
     user_id = extract_token(authorization)
 
-    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    user = await cursor.fetchone()
+    user = await db.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

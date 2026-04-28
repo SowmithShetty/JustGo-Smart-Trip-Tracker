@@ -6,16 +6,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import init_db
+from database import init_pool, close_pool, init_db
 from routers import auth, trips, users
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database on startup."""
+    """Initialize database pool on startup, close on shutdown."""
+    await init_pool()
     await init_db()
     print("[OK] Database initialized")
     yield
+    await close_pool()
 
 
 app = FastAPI(
