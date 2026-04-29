@@ -1,5 +1,5 @@
 /**
- * Trip History Page — Scrollable list of past trips.
+ * Trip History Page — Futuristic journey logbook.
  */
 
 import { listTrips, getTrip, isAuthenticated } from '../services/api.js';
@@ -14,12 +14,14 @@ export function render(container, { onNavigate }) {
     if (!isAuthenticated()) {
         container.innerHTML = `
             <div class="page">
-                <div class="container">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <h3>Login Required</h3>
-                        <p>Sign in to view your trip history.</p>
-                        <button class="btn btn-primary" id="login-prompt-btn" style="margin-top:var(--space-lg);">Sign In</button>
+                <div class="container" style="max-width:600px; text-align:center; padding-top:var(--space-2xl);">
+                    <div class="glass-card" style="padding:var(--space-2xl);">
+                        <div style="font-size:3rem; margin-bottom:var(--space-md); filter:drop-shadow(0 0 20px var(--accent));">🔐</div>
+                        <h2 class="text-gradient" style="margin-bottom:var(--space-sm);">Authentication Required</h2>
+                        <p class="text-secondary" style="margin-bottom:var(--space-xl); font-size:0.9rem;">Sign in to access your full journey logbook across all your devices.</p>
+                        <button class="btn btn-primary" id="login-prompt-btn" style="min-width:180px;">
+                            Sign In / Register
+                        </button>
                     </div>
                 </div>
             </div>
@@ -32,15 +34,19 @@ export function render(container, { onNavigate }) {
 
     container.innerHTML = `
         <div class="page">
-            <div class="container">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-lg);">
-                    <div>
-                        <h2>Trip History</h2>
-                        <p class="text-secondary">Your journey logbook</p>
-                    </div>
+            <div class="container" style="max-width:760px;">
+                <!-- Header -->
+                <div style="margin-bottom:var(--space-xl);">
+                    <p class="cyber-font" style="font-size:0.65rem; letter-spacing:0.2em; color:var(--neon-cyan); margin-bottom:6px; text-transform:uppercase;">◈ Journey Logbook</p>
+                    <h2 style="margin-bottom:4px;">Trip <span class="text-gradient">History</span></h2>
+                    <p class="text-secondary" style="font-size:0.875rem;">Every journey tells a story.</p>
                 </div>
+
                 <div id="trips-container">
-                    <div class="loading-spinner"></div>
+                    <div style="text-align:center; padding:var(--space-2xl);">
+                        <div class="loading-spinner"></div>
+                        <p class="cyber-font text-tertiary" style="font-size:0.7rem; letter-spacing:0.15em; margin-top:var(--space-md);">LOADING TRIPS…</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -64,18 +70,18 @@ async function loadTrips(settings, onNavigate) {
         if (!trips || trips.length === 0) {
             el.innerHTML = `
                 <div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                         <circle cx="12" cy="10" r="3"/>
                     </svg>
                     <h3>No Trips Yet</h3>
-                    <p>Start your first trip from the home screen!</p>
+                    <p>Head to the home screen and start your first adventure!</p>
                 </div>
             `;
             return;
         }
 
-        // Group trips by date
+        // Group by date
         const grouped = {};
         trips.forEach(trip => {
             const date = new Date(trip.started_at).toLocaleDateString('en-US', {
@@ -86,23 +92,42 @@ async function loadTrips(settings, onNavigate) {
         });
 
         let html = '<div class="trip-list">';
+
         for (const [date, dayTrips] of Object.entries(grouped)) {
-            html += `<p class="text-tertiary" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em; margin-top:var(--space-md); margin-bottom:var(--space-sm);">${date}</p>`;
-            dayTrips.forEach(trip => {
+            // Neon date separator
+            html += `
+                <div style="display:flex; align-items:center; gap:var(--space-sm); margin-top:var(--space-lg); margin-bottom:var(--space-sm);">
+                    <span class="cyber-font" style="font-size:0.65rem; letter-spacing:0.15em; color:var(--text-tertiary); text-transform:uppercase; white-space:nowrap;">${date}</span>
+                    <div style="flex:1; height:1px; background:linear-gradient(90deg, var(--border-color), transparent);"></div>
+                </div>
+            `;
+
+            dayTrips.forEach((trip, i) => {
+                const modeClass = trip.mode || 'walk';
+                const modeColor = modeClass === 'walk' ? 'var(--neon-cyan)' : modeClass === 'run' ? 'var(--neon-green)' : 'var(--neon-magenta)';
+                const modeIcon  = modeClass === 'walk' ? '🚶' : modeClass === 'run' ? '🏃' : '🚗';
+
                 html += `
-                    <div class="trip-card glass-card" data-trip-id="${trip.id}">
+                    <div class="trip-card glass-card" data-trip-id="${trip.id}" style="animation-delay:${i * 60}ms; animation: pageIn 0.4s ease-out both;">
                         <div class="trip-mini-map" id="mini-map-${trip.id}"></div>
                         <div class="trip-info">
+                            <div style="display:flex; align-items:center; gap:var(--space-sm); margin-bottom:2px;">
+                                <span style="font-size:1rem;">${modeIcon}</span>
+                                <span style="font-weight:700; font-size:0.9rem; color:${modeColor};">${modeClass.charAt(0).toUpperCase() + modeClass.slice(1)}</span>
+                            </div>
                             <div class="trip-stats">
-                                <span>📏 ${formatDistance(trip.total_distance_km, settings.units)}</span>
-                                <span>⏱ ${formatDuration(trip.duration_seconds)}</span>
+                                <span style="color:var(--neon-green);">📏 ${formatDistance(trip.total_distance_km, settings.units)}</span>
+                                <span style="color:var(--warning);">⏱ ${formatDuration(trip.duration_seconds)}</span>
                             </div>
                             <div class="trip-date">
                                 ${new Date(trip.started_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                — Avg ${(settings.units === 'mi' ? (trip.avg_speed_kmh * 0.621371).toFixed(1) + ' mph' : trip.avg_speed_kmh.toFixed(1) + ' km/h')}
+                                &nbsp;·&nbsp;
+                                Avg ${settings.units === 'mi'
+                                    ? (trip.avg_speed_kmh * 0.621371).toFixed(1) + ' mph'
+                                    : trip.avg_speed_kmh.toFixed(1) + ' km/h'}
                             </div>
                         </div>
-                        <div class="trip-mode-badge">${trip.mode}</div>
+                        <div class="trip-mode-badge ${modeClass}">${modeClass}</div>
                     </div>
                 `;
             });
@@ -110,13 +135,12 @@ async function loadTrips(settings, onNavigate) {
         html += '</div>';
         el.innerHTML = html;
 
-        // Add click handlers
+        // Click handlers
         el.querySelectorAll('.trip-card').forEach(card => {
             card.addEventListener('click', async () => {
                 const tripId = card.dataset.tripId;
                 try {
                     const detail = await getTrip(tripId);
-                    // Navigate to summary with full data
                     sessionStorage.setItem('justgo_trip_result', JSON.stringify({
                         id: detail.trip.id,
                         points: detail.gps_points,
@@ -136,15 +160,13 @@ async function loadTrips(settings, onNavigate) {
             });
         });
 
-        // Render mini maps (only for visible trips, lazy)
-        trips.slice(0, 10).forEach(trip => {
-            renderMiniMap(trip);
-        });
+        // Mini maps
+        trips.slice(0, 10).forEach(trip => renderMiniMap(trip));
 
     } catch (err) {
         el.innerHTML = `
             <div class="empty-state">
-                <h3>Error Loading Trips</h3>
+                <h3 style="color:var(--neon-magenta);">Error Loading Trips</h3>
                 <p class="text-secondary">${err.message}</p>
             </div>
         `;
@@ -154,36 +176,25 @@ async function loadTrips(settings, onNavigate) {
 async function renderMiniMap(trip) {
     const el = document.getElementById(`mini-map-${trip.id}`);
     if (!el || typeof L === 'undefined') return;
-
     try {
-        // Try to get trip detail for GPS points
         const detail = await getTrip(trip.id);
         const points = detail.gps_points;
-
         if (points.length < 2) {
-            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><span class="text-tertiary" style="font-size:0.625rem;">No route</span></div>';
+            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><span style="font-size:1.2rem;">📍</span></div>';
             return;
         }
-
         const m = L.map(el, {
-            zoomControl: false,
-            attributionControl: false,
-            dragging: false,
-            scrollWheelZoom: false,
-            doubleClickZoom: false,
-            touchZoom: false,
+            zoomControl: false, attributionControl: false,
+            dragging: false, scrollWheelZoom: false,
+            doubleClickZoom: false, touchZoom: false,
         }).setView([points[0].latitude, points[0].longitude], 13);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19,
-        }).addTo(m);
-
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(m);
         const latlngs = points.map(p => [p.latitude, p.longitude]);
-        L.polyline(latlngs, { color: '#A78BFA', weight: 2, opacity: 0.8 }).addTo(m);
+        L.polyline(latlngs, { color: '#A78BFA', weight: 2.5, opacity: 0.9 }).addTo(m);
         m.fitBounds(latlngs, { padding: [5, 5] });
-
         miniMaps.push(m);
     } catch {
-        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><span class="text-tertiary" style="font-size:0.625rem;">🗺️</span></div>';
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:1.2rem;">🗺️</div>';
     }
 }

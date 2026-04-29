@@ -1,5 +1,5 @@
 /**
- * Trip Summary Page — Gradient route map, insights, final stats.
+ * Trip Summary Page — Futuristic post-trip debrief.
  */
 
 import { createTrip, isAuthenticated } from '../services/api.js';
@@ -11,23 +11,21 @@ let map = null;
 export function render(container, { onNavigate, tripData }) {
     const settings = getLocalSettings();
 
-    // tripData can come from sessionStorage (just finished) or passed directly (from history)
     let data = tripData;
     if (!data) {
-        try {
-            data = JSON.parse(sessionStorage.getItem('justgo_trip_result'));
-        } catch { data = null; }
+        try { data = JSON.parse(sessionStorage.getItem('justgo_trip_result')); }
+        catch { data = null; }
     }
 
     if (!data || !data.points || data.points.length < 2) {
         container.innerHTML = `
             <div class="page">
-                <div class="container">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                        <h3>No Trip Data</h3>
-                        <p>Start a trip from the home screen to see your summary here.</p>
-                        <button class="btn btn-primary" id="go-home-btn" style="margin-top:var(--space-lg);">Go Home</button>
+                <div class="container" style="max-width:600px; text-align:center; padding-top:var(--space-2xl);">
+                    <div class="glass-card" style="padding:var(--space-2xl);">
+                        <div style="font-size:3rem; margin-bottom:var(--space-md);">🛸</div>
+                        <h2 class="text-gradient" style="margin-bottom:var(--space-sm);">No Trip Data</h2>
+                        <p class="text-secondary" style="margin-bottom:var(--space-xl);">Start a trip from the home screen to see your summary here.</p>
+                        <button class="btn btn-primary" id="go-home-btn">← Go Home</button>
                     </div>
                 </div>
             </div>
@@ -36,144 +34,144 @@ export function render(container, { onNavigate, tripData }) {
         return;
     }
 
-    // Compute local stats
     const totalDist = data.totalDistance || 0;
-    const duration = data.duration || 0;
-    const avgSpeed = duration > 0 ? (totalDist / (duration / 3600)) : 0;
-    const speeds = data.points.map(p => p.speed_kmh || 0).filter(s => s > 0);
-    const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
-
-    // Check if we have server insights (from history) or need to compute
-    const hasInsights = data.anomalies && data.anomalies.length > 0;
+    const duration  = data.duration || 0;
+    const avgSpeed  = duration > 0 ? (totalDist / (duration / 3600)) : 0;
+    const speeds    = data.points.map(p => p.speed_kmh || 0).filter(s => s > 0);
+    const maxSpeed  = speeds.length > 0 ? Math.max(...speeds) : 0;
     const anomalies = data.anomalies || [];
+
+    const modeColor = data.mode === 'walk' ? 'var(--neon-cyan)' : data.mode === 'run' ? 'var(--neon-green)' : 'var(--neon-magenta)';
+    const modeIcon  = data.mode === 'walk' ? '🚶' : data.mode === 'run' ? '🏃' : '🚗';
 
     container.innerHTML = `
         <div class="page">
-            <div class="container">
-                <h2 style="margin-bottom:var(--space-xs);">Trip Summary</h2>
-                <p class="text-secondary" style="margin-bottom:var(--space-lg);">
-                    ${data.mode ? data.mode.charAt(0).toUpperCase() + data.mode.slice(1) : 'Trip'} •
-                    ${new Date(data.startTime || Date.now()).toLocaleDateString()}
-                </p>
+            <div class="container" style="max-width:760px;">
 
-                <!-- Gradient Route Map -->
-                <div class="map-container glass-card" id="summary-map" style="height:350px; margin-bottom:var(--space-lg); padding:0;"></div>
+                <!-- Header -->
+                <div style="margin-bottom:var(--space-lg);">
+                    <p class="cyber-font" style="font-size:0.65rem; letter-spacing:0.2em; color:${modeColor}; margin-bottom:6px; text-transform:uppercase;">
+                        ◈ ${modeIcon} ${(data.mode || 'Trip').toUpperCase()} COMPLETE
+                    </p>
+                    <h2 style="margin-bottom:4px;">Trip <span class="text-gradient">Summary</span></h2>
+                    <p class="text-secondary" style="font-size:0.875rem; font-family:var(--font-mono);">
+                        ${new Date(data.startTime || Date.now()).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' })}
+                    </p>
+                </div>
 
-                <!-- Stats Grid -->
-                <div class="summary-stats" style="margin-bottom:var(--space-lg);">
-                    <div class="summary-stat glass-card">
-                        <div class="stat-value distance">${formatDistance(totalDist, settings.units)}</div>
-                        <div class="stat-label">Total Distance</div>
+                <!-- Route Map -->
+                <div class="glass-card" id="summary-map" style="height:360px; padding:0; margin-bottom:var(--space-lg); overflow:hidden; box-shadow:0 0 40px rgba(167,139,250,0.1);"></div>
+
+                <!-- Metric Grid -->
+                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-md); margin-bottom:var(--space-lg);">
+                    <div class="metric-box green">
+                        <div class="stat-label" style="margin-bottom:8px;">Total Distance</div>
+                        <div class="stat-value distance" style="font-size:2rem;">${formatDistance(totalDist, settings.units)}</div>
                     </div>
-                    <div class="summary-stat glass-card">
-                        <div class="stat-value time">${formatDuration(duration)}</div>
-                        <div class="stat-label">Total Time</div>
+                    <div class="metric-box purple" style="--mb-color:var(--warning);">
+                        <div class="stat-label" style="margin-bottom:8px;">Duration</div>
+                        <div class="stat-value time" style="font-size:2rem;">${formatDuration(duration)}</div>
                     </div>
-                    <div class="summary-stat glass-card">
-                        <div class="stat-value speed">${formatSpeed(avgSpeed, settings.units)}</div>
-                        <div class="stat-label">Avg Speed</div>
+                    <div class="metric-box cyan">
+                        <div class="stat-label" style="margin-bottom:8px;">Avg Speed</div>
+                        <div class="stat-value speed" style="font-size:2rem;">${formatSpeed(avgSpeed, settings.units)}</div>
                     </div>
-                    <div class="summary-stat glass-card">
-                        <div class="stat-value" style="color:var(--danger);">${formatSpeed(maxSpeed, settings.units)}</div>
-                        <div class="stat-label">Max Speed</div>
+                    <div class="metric-box magenta">
+                        <div class="stat-label" style="margin-bottom:8px;">Max Speed</div>
+                        <div class="stat-value" style="font-size:2rem; color:var(--neon-magenta); text-shadow:0 0 20px var(--neon-magenta-glow);">${formatSpeed(maxSpeed, settings.units)}</div>
                     </div>
                 </div>
 
-                <!-- Insights Box -->
-                <div id="insights-section" style="margin-bottom:var(--space-lg);">
-                    <h3 style="margin-bottom:var(--space-md);">🔍 Insights</h3>
-                    <div id="insights-list" class="trip-list">
+                <!-- Insights -->
+                <div style="margin-bottom:var(--space-lg);">
+                    <div style="display:flex; align-items:center; gap:var(--space-sm); margin-bottom:var(--space-md);">
+                        <span style="font-size:1rem;">🔍</span>
+                        <h3>Route <span class="text-gradient">Insights</span></h3>
+                        <div style="flex:1; height:1px; background:linear-gradient(90deg,var(--border-color),transparent);"></div>
+                    </div>
+                    <div class="trip-list" id="insights-list">
                         ${anomalies.length > 0
-                            ? anomalies.map(a => `
-                                <div class="insight-card glass-card">
+                            ? anomalies.map((a, i) => `
+                                <div class="insight-card glass-card" style="animation-delay:${i * 80}ms;">
                                     <div class="insight-icon ${a.reason || 'unknown'}">
                                         ${a.reason === 'elevation' ? '⛰️' : a.reason === 'traffic' ? '🚦' : '❓'}
                                     </div>
                                     <div class="insight-text">${a.detail || 'Speed anomaly detected.'}</div>
                                 </div>
                             `).join('')
-                            : '<p class="text-tertiary" style="padding:var(--space-md);">Insights will appear after the trip is saved and analyzed by the server.</p>'
+                            : `<div class="glass-card" style="padding:var(--space-md); text-align:center;">
+                                   <p class="cyber-font text-tertiary" style="font-size:0.7rem; letter-spacing:0.1em;">
+                                       Insights will appear after the trip is saved &amp; analyzed by the server.
+                                   </p>
+                               </div>`
                         }
                     </div>
                 </div>
 
-                <!-- Action Buttons -->
-                <div style="display:flex; gap:var(--space-md); justify-content:center;">
+                <!-- Actions -->
+                <div style="display:flex; gap:var(--space-md); justify-content:center; flex-wrap:wrap;">
                     ${!data.id ? `
-                        <button class="btn btn-primary" id="save-trip-btn">💾 Save Trip</button>
-                        <button class="btn btn-secondary" id="discard-trip-btn">🗑️ Discard</button>
+                        <button class="btn btn-primary" id="save-trip-btn" style="min-width:160px;">💾 &nbsp;Save Trip</button>
+                        <button class="btn btn-secondary" id="discard-trip-btn">🗑️ &nbsp;Discard</button>
                     ` : `
-                        <button class="btn btn-secondary" id="back-btn">← Back to History</button>
-                        <button class="btn btn-danger" id="delete-trip-btn">🗑️ Delete Trip</button>
+                        <button class="btn btn-secondary" id="back-btn">← &nbsp;Back to History</button>
+                        <button class="btn btn-danger"    id="delete-trip-btn">🗑️ &nbsp;Delete Trip</button>
                     `}
                 </div>
 
-                <!-- Loading state for save -->
-                <div id="save-loading" style="display:none; text-align:center; margin-top:var(--space-md);">
+                <!-- Save loading -->
+                <div id="save-loading" style="display:none; text-align:center; margin-top:var(--space-lg);">
                     <div class="loading-spinner"></div>
-                    <p class="text-secondary" style="margin-top:var(--space-sm);">Analyzing trip & saving…</p>
+                    <p class="cyber-font text-secondary" style="margin-top:var(--space-sm); font-size:0.7rem; letter-spacing:0.1em;">ANALYZING & SAVING…</p>
                 </div>
             </div>
         </div>
     `;
 
-    // ── Render Map ──
     renderSummaryMap(data.points);
 
-    // ── Save Button ──
     document.getElementById('save-trip-btn')?.addEventListener('click', async () => {
         if (!isAuthenticated()) {
             window.dispatchEvent(new CustomEvent('justgo:showAuth'));
             return;
         }
-
-        const btn = document.getElementById('save-trip-btn');
+        const btn     = document.getElementById('save-trip-btn');
+        const discard = document.getElementById('discard-trip-btn');
         const loading = document.getElementById('save-loading');
         if (btn) btn.style.display = 'none';
-        document.getElementById('discard-trip-btn')?.style && (document.getElementById('discard-trip-btn').style.display = 'none');
+        if (discard) discard.style.display = 'none';
         if (loading) loading.style.display = 'block';
 
         try {
             const tripPayload = {
                 mode: data.mode || 'walk',
                 started_at: data.startTime || new Date().toISOString(),
-                ended_at: data.endTime || new Date().toISOString(),
+                ended_at:   data.endTime   || new Date().toISOString(),
                 gps_points: data.points.map((p, i) => ({
-                    latitude: p.latitude,
-                    longitude: p.longitude,
-                    altitude: p.altitude || 0,
-                    speed_kmh: p.speed_kmh || 0,
-                    recorded_at: p.recorded_at,
-                    sequence_order: i,
+                    latitude: p.latitude, longitude: p.longitude,
+                    altitude: p.altitude || 0, speed_kmh: p.speed_kmh || 0,
+                    recorded_at: p.recorded_at, sequence_order: i,
                 })),
             };
-
-            const result = await createTrip(tripPayload);
+            await createTrip(tripPayload);
             sessionStorage.removeItem('justgo_trip_result');
-
-            // Show success & reload summary with server insights
-            window.dispatchEvent(new CustomEvent('justgo:toast', { detail: { message: 'Trip saved! Insights generated.', type: 'success' } }));
-
-            // Navigate to the saved trip
+            window.dispatchEvent(new CustomEvent('justgo:toast', { detail: { message: '✅ Trip saved! Insights generated.', type: 'success' } }));
             onNavigate('history');
         } catch (err) {
             if (loading) loading.style.display = 'none';
             if (btn) btn.style.display = '';
-            document.getElementById('discard-trip-btn')?.style && (document.getElementById('discard-trip-btn').style.display = '');
+            if (discard) discard.style.display = '';
             window.dispatchEvent(new CustomEvent('justgo:toast', { detail: { message: err.message, type: 'error' } }));
         }
     });
 
-    // ── Discard Button ──
     document.getElementById('discard-trip-btn')?.addEventListener('click', () => {
         sessionStorage.removeItem('justgo_trip_result');
         onNavigate('home');
     });
 
-    // ── Back Button (from history) ──
     document.getElementById('back-btn')?.addEventListener('click', () => onNavigate('history'));
 
-    // ── Delete Button ──
     document.getElementById('delete-trip-btn')?.addEventListener('click', async () => {
         if (data.id && confirm('Delete this trip permanently?')) {
             try {
@@ -199,57 +197,44 @@ function renderSummaryMap(points) {
     map = L.map(el, { zoomControl: false }).setView([points[0].latitude, points[0].longitude], 14);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OSM &copy; CARTO',
-        maxZoom: 19,
+        attribution: '&copy; OSM &copy; CARTO', maxZoom: 19,
     }).addTo(map);
 
-    // Get speed range for gradient coloring
     const speeds = points.map(p => p.speed_kmh || 0);
     const maxSpd = Math.max(...speeds, 1);
 
-    // Draw gradient-colored segments
     for (let i = 1; i < points.length; i++) {
-        const spd = points[i].speed_kmh || 0;
-        const ratio = spd / maxSpd;
-        const color = speedToColor(ratio);
-
+        const ratio = (points[i].speed_kmh || 0) / maxSpd;
         L.polyline(
-            [[points[i-1].latitude, points[i-1].longitude],
-             [points[i].latitude, points[i].longitude]],
-            { color, weight: 5, opacity: 0.85 }
+            [[points[i-1].latitude, points[i-1].longitude], [points[i].latitude, points[i].longitude]],
+            { color: speedToColor(ratio), weight: 6, opacity: 0.9 }
         ).addTo(map);
     }
 
-    // Start marker
+    // Animated glow polyline
+    L.polyline(points.map(p => [p.latitude, p.longitude]), {
+        color: 'rgba(167,139,250,0.2)', weight: 12, opacity: 0.6,
+    }).addTo(map);
+
     L.circleMarker([points[0].latitude, points[0].longitude], {
-        radius: 6, fillColor: '#34D399', fillOpacity: 1, color: '#fff', weight: 2,
+        radius: 8, fillColor: '#00FF87', fillOpacity: 1, color: '#fff', weight: 2,
     }).addTo(map).bindPopup('Start');
 
-    // End marker
     const last = points[points.length - 1];
     L.circleMarker([last.latitude, last.longitude], {
-        radius: 6, fillColor: '#F87171', fillOpacity: 1, color: '#fff', weight: 2,
+        radius: 8, fillColor: '#FF2D78', fillOpacity: 1, color: '#fff', weight: 2,
     }).addTo(map).bindPopup('End');
 
-    // Fit bounds
-    const bounds = points.map(p => [p.latitude, p.longitude]);
-    map.fitBounds(bounds, { padding: [30, 30] });
+    map.fitBounds(points.map(p => [p.latitude, p.longitude]), { padding: [30, 30] });
 }
 
-/** Map speed ratio (0-1) to color gradient: Red → Yellow → Green */
 function speedToColor(ratio) {
     if (ratio < 0.33) {
-        // Red to Yellow
-        const r = 239;
-        const g = Math.round(68 + (ratio / 0.33) * (187));
-        return `rgb(${r}, ${g}, 68)`;
+        const g = Math.round(68 + (ratio / 0.33) * 187);
+        return `rgb(239, ${g}, 68)`;
     } else if (ratio < 0.66) {
-        // Yellow to Green
         const r = Math.round(239 - ((ratio - 0.33) / 0.33) * 187);
-        const g = 255;
-        return `rgb(${r}, ${g}, 68)`;
-    } else {
-        // Green
-        return `rgb(52, 211, 153)`;
+        return `rgb(${r}, 255, 68)`;
     }
+    return `rgb(0, 255, 135)`;
 }
