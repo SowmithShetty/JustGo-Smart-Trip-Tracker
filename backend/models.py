@@ -20,6 +20,10 @@ class UserLogin(BaseModel):
     password: str
 
 
+class GoogleLogin(BaseModel):
+    credential: str
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
