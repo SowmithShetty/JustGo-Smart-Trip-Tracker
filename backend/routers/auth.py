@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SECRET_KEY = os.getenv("JWT_SECRET", "justgo-super-secret-key-change-in-prod")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 72
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "5347821434-t6jr98m948lf5p81mas61fqab2m2jebr.apps.googleusercontent.com")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

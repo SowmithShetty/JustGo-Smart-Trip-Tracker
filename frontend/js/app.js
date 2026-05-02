@@ -143,7 +143,7 @@ function showAuthModal() {
     // Initialize Google Sign-In
     if (window.google && window.google.accounts) {
         window.google.accounts.id.initialize({
-            client_id: "YOUR_GOOGLE_CLIENT_ID", // TODO: Replace with real Client ID
+            client_id: "5347821434-t6jr98m948lf5p81mas61fqab2m2jebr.apps.googleusercontent.com",
             callback: handleGoogleCallback
         });
         window.google.accounts.id.renderButton(
