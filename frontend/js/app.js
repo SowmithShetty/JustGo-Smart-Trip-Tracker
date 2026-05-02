@@ -419,7 +419,6 @@ async function validateSession() {
         setUser(user);
     } catch {
         // Token is expired or invalid — clear it silently
-        const { clearAuth } = await import('./services/api.js');
         clearAuth();
     }
 }
