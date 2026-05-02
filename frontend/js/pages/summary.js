@@ -82,29 +82,19 @@ export function render(container, { onNavigate, tripData }) {
                     </div>
                 </div>
 
-                <!-- Insights -->
+                <!-- 3D Speed Visualization -->
                 <div style="margin-bottom:var(--space-lg);">
                     <div style="display:flex; align-items:center; gap:var(--space-sm); margin-bottom:var(--space-md);">
-                        <span style="font-size:1rem;">🔍</span>
-                        <h3>Route <span class="text-gradient">Insights</span></h3>
+                        <span style="font-size:1rem;">📈</span>
+                        <h3>Speed <span class="text-gradient">Visualization</span></h3>
                         <div style="flex:1; height:1px; background:linear-gradient(90deg,var(--border-color),transparent);"></div>
                     </div>
-                    <div class="trip-list" id="insights-list">
-                        ${anomalies.length > 0
-                            ? anomalies.map((a, i) => `
-                                <div class="insight-card glass-card" style="animation-delay:${i * 80}ms;">
-                                    <div class="insight-icon ${a.reason || 'unknown'}">
-                                        ${a.reason === 'elevation' ? '⛰️' : a.reason === 'traffic' ? '🚦' : '❓'}
-                                    </div>
-                                    <div class="insight-text">${a.detail || 'Speed anomaly detected.'}</div>
-                                </div>
-                            `).join('')
-                            : `<div class="glass-card" style="padding:var(--space-md); text-align:center;">
-                                   <p class="cyber-font text-tertiary" style="font-size:0.7rem; letter-spacing:0.1em;">
-                                       Insights will appear after the trip is saved &amp; analyzed by the server.
-                                   </p>
-                               </div>`
-                        }
+                    <div class="glass-card" id="summary-3d-mount" style="height:280px; padding:0; position:relative;">
+                        <div style="position:absolute; top:16px; left:16px; z-index:10; pointer-events:none;">
+                            <p class="cyber-font text-secondary" style="font-size:0.65rem; letter-spacing:0.1em; text-transform:uppercase;">
+                                INTERACTIVE 3D SPEED PROFILE
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -129,6 +119,7 @@ export function render(container, { onNavigate, tripData }) {
     `;
 
     renderSummaryMap(data.points);
+    init3DSummary(data.points);
 
     // ── Save Trip Handler ──
     const saveTrip = async () => {
@@ -204,6 +195,10 @@ export function render(container, { onNavigate, tripData }) {
 
 export function cleanup() {
     if (map) { map.remove(); map = null; }
+    if (summaryAnimId) cancelAnimationFrame(summaryAnimId);
+    if (summaryRenderer) { summaryRenderer.dispose(); summaryRenderer = null; }
+    summaryScene = null; summaryCamera = null;
+    
     // Remove auth complete listener
     if (window._justgoAuthHandler) {
         window.removeEventListener('justgo:authComplete', window._justgoAuthHandler);
@@ -259,4 +254,137 @@ function speedToColor(ratio) {
         return `rgb(${r}, 255, 68)`;
     }
     return `rgb(0, 255, 135)`;
+}
+
+// ── Three.js 3D Speed Visualization ─────────────────
+
+let summaryScene, summaryCamera, summaryRenderer, summaryAnimId;
+let ribbonMesh;
+
+function init3DSummary(points) {
+    const mount = document.getElementById('summary-3d-mount');
+    if (!mount || typeof THREE === 'undefined' || points.length < 2) return;
+
+    const w = mount.clientWidth;
+    const h = mount.clientHeight;
+
+    summaryScene = new THREE.Scene();
+    summaryCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+    summaryCamera.position.set(0, 15, 30);
+    summaryCamera.lookAt(0, 0, 0);
+
+    summaryRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    summaryRenderer.setSize(w, h);
+    summaryRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mount.appendChild(summaryRenderer.domElement);
+
+    const speeds = points.map(p => p.speed_kmh || 0);
+    const maxSpd = Math.max(...speeds, 1);
+    
+    // Create a 3D Ribbon/Graph
+    const pCount = points.length;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(pCount * 2 * 3); // Top and bottom vertices for each point
+    const colors = new Float32Array(pCount * 2 * 3);
+    const indices = [];
+
+    const graphWidth = 40; // Total width in 3D space
+    const startX = -graphWidth / 2;
+    const stepX = graphWidth / (pCount - 1);
+
+    const colorCyan = new THREE.Color(0x00FFFF);
+    const colorMagenta = new THREE.Color(0xFF007F);
+
+    for (let i = 0; i < pCount; i++) {
+        const x = startX + (i * stepX);
+        const speedRatio = (points[i].speed_kmh || 0) / maxSpd;
+        const height = Math.max(speedRatio * 15, 0.5); // Min height 0.5
+
+        // Bottom vertex
+        positions[(i * 2) * 3] = x;
+        positions[(i * 2) * 3 + 1] = 0;
+        positions[(i * 2) * 3 + 2] = 0;
+
+        // Top vertex
+        positions[(i * 2 + 1) * 3] = x;
+        positions[(i * 2 + 1) * 3 + 1] = height;
+        positions[(i * 2 + 1) * 3 + 2] = 0;
+
+        // Colors
+        const c = colorCyan.clone().lerp(colorMagenta, speedRatio);
+        
+        // Bottom color (darker)
+        colors[(i * 2) * 3] = c.r * 0.2;
+        colors[(i * 2) * 3 + 1] = c.g * 0.2;
+        colors[(i * 2) * 3 + 2] = c.b * 0.2;
+
+        // Top color
+        colors[(i * 2 + 1) * 3] = c.r;
+        colors[(i * 2 + 1) * 3 + 1] = c.g;
+        colors[(i * 2 + 1) * 3 + 2] = c.b;
+
+        // Indices for triangles
+        if (i < pCount - 1) {
+            const v0 = i * 2;
+            const v1 = i * 2 + 1;
+            const v2 = (i + 1) * 2;
+            const v3 = (i + 1) * 2 + 1;
+
+            indices.push(v0, v1, v2);
+            indices.push(v1, v3, v2);
+        }
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    const material = new THREE.MeshBasicMaterial({ 
+        vertexColors: true, 
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending
+    });
+
+    ribbonMesh = new THREE.Mesh(geometry, material);
+    summaryScene.add(ribbonMesh);
+
+    // Add a glowing grid below
+    const gridHelper = new THREE.GridHelper(50, 20, 0x00FFFF, 0x8A2BE2);
+    gridHelper.position.y = -0.5;
+    gridHelper.material.opacity = 0.2;
+    gridHelper.material.transparent = true;
+    summaryScene.add(gridHelper);
+
+    // Mouse interaction for rotation
+    let mouseX = 0;
+    mount.addEventListener('mousemove', (e) => {
+        const rect = mount.getBoundingClientRect();
+        mouseX = ((e.clientX - rect.left) / w - 0.5) * 2;
+    });
+
+    function animate() {
+        summaryAnimId = requestAnimationFrame(animate);
+        
+        // Auto rotate slowly, plus mouse interaction
+        if (ribbonMesh) {
+            ribbonMesh.rotation.y += 0.002;
+            summaryCamera.position.x += (mouseX * 20 - summaryCamera.position.x) * 0.05;
+            summaryCamera.lookAt(0, 5, 0);
+        }
+
+        summaryRenderer.render(summaryScene, summaryCamera);
+    }
+    animate();
+
+    const resizeObs = new ResizeObserver(() => {
+        if (!mount || !summaryRenderer) return;
+        const nw = mount.clientWidth, nh = mount.clientHeight;
+        summaryCamera.aspect = nw / nh;
+        summaryCamera.updateProjectionMatrix();
+        summaryRenderer.setSize(nw, nh);
+    });
+    resizeObs.observe(mount);
 }

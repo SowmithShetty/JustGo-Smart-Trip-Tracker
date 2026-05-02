@@ -23,6 +23,9 @@ export function render(container, { onNavigate }) {
             <!-- Full-screen Map -->
             <div class="map-container fullscreen" id="tracking-map" style="border-radius:0; border:none;"></div>
 
+            <!-- 3D Speedometer Overlay -->
+            <div id="speedometer-mount" style="position:absolute; inset:0; z-index:40; pointer-events:none;"></div>
+
             <!-- Top Mode Badge -->
             <div style="
                 position:fixed; top:84px; left:50%;
@@ -108,6 +111,7 @@ export function render(container, { onNavigate }) {
     `;
 
     initMap();
+    initSpeedometer(modeColor);
     startTracking();
     timerInterval = setInterval(updateTimer, 1000);
 
@@ -133,9 +137,17 @@ export function render(container, { onNavigate }) {
     });
 }
 
+let speedScene, speedCamera, speedRenderer, speedAnimId;
+let speedRing, speedParticles;
+let currentVisualSpeed = 0;
+let targetVisualSpeed = 0;
+
 export function cleanup() {
     if (timerInterval) clearInterval(timerInterval);
     if (map) { map.remove(); map = null; }
+    if (speedAnimId) cancelAnimationFrame(speedAnimId);
+    if (speedRenderer) { speedRenderer.dispose(); speedRenderer = null; }
+    speedScene = null; speedCamera = null;
     polyline = null; marker = null;
 }
 
@@ -187,6 +199,7 @@ function startTracking() {
             if (speedEl) {
                 const spd = settings.units === 'mi' ? t.currentSpeed * 0.621371 : t.currentSpeed;
                 speedEl.textContent = spd.toFixed(1);
+                targetVisualSpeed = spd; // Update 3D speedometer target
             }
             if (distEl) {
                 const dist = settings.units === 'mi' ? t.totalDistance * 0.621371 : t.totalDistance;
@@ -216,4 +229,117 @@ function stopTracking(onNavigate) {
     const mode = localStorage.getItem('justgo_mode') || 'walk';
     sessionStorage.setItem('justgo_trip_result', JSON.stringify({ ...result, mode }));
     onNavigate('summary');
+}
+
+// ── Three.js 3D Speedometer ─────────────────────────
+
+function initSpeedometer(modeColorStr) {
+    const mount = document.getElementById('speedometer-mount');
+    if (!mount || typeof THREE === 'undefined') return;
+
+    const w = mount.clientWidth;
+    const h = mount.clientHeight;
+
+    speedScene = new THREE.Scene();
+    speedCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+    speedCamera.position.z = 10;
+    // Position HUD slightly above the bottom
+    speedCamera.position.y = 2; 
+    speedCamera.lookAt(0, 0, 0);
+
+    speedRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    speedRenderer.setSize(w, h);
+    speedRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mount.appendChild(speedRenderer.domElement);
+
+    // Parse the CSS variable color for Three.js
+    const rootStyles = getComputedStyle(document.documentElement);
+    let colorHex = rootStyles.getPropertyValue(modeColorStr.replace('var(', '').replace(')', '')).trim();
+    if (!colorHex) colorHex = '#00FFFF'; // Fallback
+    const baseColor = new THREE.Color(colorHex);
+
+    // 3D HUD Ring
+    const ringGeo = new THREE.TorusGeometry(3, 0.05, 16, 100);
+    const ringMat = new THREE.MeshBasicMaterial({ 
+        color: baseColor, 
+        transparent: true, 
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending 
+    });
+    speedRing = new THREE.Mesh(ringGeo, ringMat);
+    // Tilt the ring for a 3D perspective HUD look
+    speedRing.rotation.x = Math.PI / 2.2;
+    speedScene.add(speedRing);
+
+    // Inner tick marks
+    const ticksGeo = new THREE.TorusGeometry(2.8, 0.02, 8, 60, Math.PI * 1.5);
+    const ticksMat = new THREE.LineBasicMaterial({ 
+        color: 0xFFFFFF, 
+        transparent: true, 
+        opacity: 0.3 
+    });
+    const ticksMesh = new THREE.LineSegments(
+        new THREE.WireframeGeometry(ticksGeo), 
+        ticksMat
+    );
+    ticksMesh.rotation.x = Math.PI / 2.2;
+    speedScene.add(ticksMesh);
+
+    // Particles circulating the ring
+    const pCount = 200;
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(pCount * 3);
+    for(let i=0; i<pCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 3 + (Math.random() - 0.5) * 0.4;
+        pPos[i*3] = Math.cos(angle) * radius;
+        pPos[i*3+1] = (Math.random() - 0.5) * 0.2;
+        pPos[i*3+2] = Math.sin(angle) * radius;
+    }
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({
+        color: baseColor,
+        size: 0.05,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+    speedParticles = new THREE.Points(pGeo, pMat);
+    speedParticles.rotation.x = Math.PI / 2.2;
+    speedScene.add(speedParticles);
+
+    function animate() {
+        speedAnimId = requestAnimationFrame(animate);
+        if (!speedRing) return;
+
+        // Smoothly interpolate current visual speed towards target
+        currentVisualSpeed += (targetVisualSpeed - currentVisualSpeed) * 0.1;
+
+        // Base rotation + rotation based on speed
+        const rotationSpeed = 0.005 + (currentVisualSpeed * 0.002);
+        speedRing.rotation.z -= rotationSpeed;
+        ticksMesh.rotation.z -= rotationSpeed * 1.2;
+        speedParticles.rotation.z -= rotationSpeed * 1.5;
+
+        // Pulse effect based on speed
+        const scale = 1 + (currentVisualSpeed * 0.01) + Math.sin(Date.now() * 0.005) * 0.02;
+        speedRing.scale.set(scale, scale, scale);
+        
+        // Color shift: higher speed adds more magenta/heat
+        const heatColor = baseColor.clone().lerp(new THREE.Color(0xFF007F), Math.min(currentVisualSpeed / 50, 1));
+        speedRing.material.color = heatColor;
+        speedParticles.material.color = heatColor;
+
+        speedRenderer.render(speedScene, speedCamera);
+    }
+    animate();
+
+    const resizeObs = new ResizeObserver(() => {
+        if (!mount || !speedRenderer) return;
+        const nw = mount.clientWidth, nh = mount.clientHeight;
+        speedCamera.aspect = nw / nh;
+        speedCamera.updateProjectionMatrix();
+        speedRenderer.setSize(nw, nh);
+    });
+    resizeObs.observe(mount);
 }

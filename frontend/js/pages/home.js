@@ -154,48 +154,67 @@ function initGlobe() {
     globeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.insertBefore(globeRenderer.domElement, mount.firstChild);
 
-    // Wireframe globe
-    const globeGeo = new THREE.SphereGeometry(1.3, 48, 48);
-    const globeMat = new THREE.MeshBasicMaterial({ color: 0x7C3AED, wireframe: true, transparent: true, opacity: 0.18 });
+    // Holographic wireframe globe
+    const globeGeo = new THREE.SphereGeometry(1.3, 64, 64);
+    const globeMat = new THREE.MeshBasicMaterial({ 
+        color: 0x00FFFF, 
+        wireframe: true, 
+        transparent: true, 
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending 
+    });
     globeMesh = new THREE.Mesh(globeGeo, globeMat);
     globeScene.add(globeMesh);
 
-    // Solid inner globe
-    const innerGeo = new THREE.SphereGeometry(1.27, 48, 48);
-    const innerMat = new THREE.MeshBasicMaterial({ color: 0x050810, transparent: true, opacity: 0.75 });
+    // Deep inner core
+    const innerGeo = new THREE.SphereGeometry(1.28, 48, 48);
+    const innerMat = new THREE.MeshBasicMaterial({ 
+        color: 0x02040A, 
+        transparent: true, 
+        opacity: 0.9 
+    });
     const innerMesh = new THREE.Mesh(innerGeo, innerMat);
     globeScene.add(innerMesh);
 
-    // Outer glow
+    // Outer hologram glow
     const glowGeo = new THREE.SphereGeometry(1.5, 48, 48);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0x00F5FF, transparent: true, opacity: 0.04, side: THREE.BackSide });
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0x8A2BE2, transparent: true, opacity: 0.05, side: THREE.BackSide, blending: THREE.AdditiveBlending });
     glowMesh = new THREE.Mesh(glowGeo, glowMat);
     globeScene.add(glowMesh);
 
-    // Second glow ring (purple)
+    // Second inner ring (cyan)
     const glow2Geo = new THREE.SphereGeometry(1.6, 48, 48);
-    const glow2Mat = new THREE.MeshBasicMaterial({ color: 0xA78BFA, transparent: true, opacity: 0.03, side: THREE.BackSide });
+    const glow2Mat = new THREE.MeshBasicMaterial({ color: 0x00FFFF, transparent: true, opacity: 0.02, side: THREE.BackSide, blending: THREE.AdditiveBlending });
     globeScene.add(new THREE.Mesh(glow2Geo, glow2Mat));
 
-    // Particles
+    // Data point particles
     const particlesGeo = new THREE.BufferGeometry();
-    const pCount = 900;
+    const pCount = 1500;
     const positions = new Float32Array(pCount * 3);
     const pColors   = new Float32Array(pCount * 3);
-    const palette = [[0.66,0.55,0.98],[0,0.96,1],[1,0.18,0.47]];
+    const palette = [[0,1,1], [0.54,0.17,0.89], [1,0,0.5]]; // Cyan, Violet, Magenta
     for (let i = 0; i < pCount; i++) {
-        positions[i*3]   = (Math.random() - 0.5) * 9;
-        positions[i*3+1] = (Math.random() - 0.5) * 9;
-        positions[i*3+2] = (Math.random() - 0.5) * 9;
+        // Distribute points on the surface of the globe
+        const phi = Math.acos(-1 + (2 * i) / pCount);
+        const theta = Math.sqrt(pCount * Math.PI) * phi;
+        const r = 1.32;
+        
+        positions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+        positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i*3+2] = r * Math.cos(phi);
+        
         const c = palette[Math.floor(Math.random() * palette.length)];
         pColors[i*3] = c[0]; pColors[i*3+1] = c[1]; pColors[i*3+2] = c[2];
     }
     particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     particlesGeo.setAttribute('color',    new THREE.BufferAttribute(pColors, 3));
     particlesMesh = new THREE.Points(particlesGeo, new THREE.PointsMaterial({
-        size: 0.018, transparent: true, opacity: 0.65, vertexColors: true,
+        size: 0.02, transparent: true, opacity: 0.8, vertexColors: true, blending: THREE.AdditiveBlending
     }));
     globeScene.add(particlesMesh);
+
+    // Add random holographic arcs representing data transfer
+    addHolographicArcs();
 
     addGlobeGridLines();
 
@@ -240,6 +259,57 @@ function initGlobe() {
         globeRenderer.setSize(nw, nh);
     });
     resizeObs.observe(mount);
+}
+
+function addHolographicArcs() {
+    const numArcs = 12;
+    for (let i = 0; i < numArcs; i++) {
+        const startLat = (Math.random() - 0.5) * 180;
+        const startLon = (Math.random() - 0.5) * 360;
+        const endLat = (Math.random() - 0.5) * 180;
+        const endLon = (Math.random() - 0.5) * 360;
+        
+        const start = latLongToVector3(startLat, startLon, 1.31);
+        const end = latLongToVector3(endLat, endLon, 1.31);
+        
+        // Control point for the curve (arcs outward)
+        const mid = start.clone().lerp(end, 0.5).normalize().multiplyScalar(1.31 + (start.distanceTo(end) * 0.3));
+        
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const points = curve.getPoints(30);
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        
+        const material = new THREE.LineBasicMaterial({ 
+            color: Math.random() > 0.5 ? 0x00FFFF : 0xFF007F,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const arcLine = new THREE.Line(geometry, material);
+        globeScene.add(arcLine);
+        
+        // Add nodes at ends
+        const nodeGeo = new THREE.SphereGeometry(0.02, 8, 8);
+        const nodeMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+        const startNode = new THREE.Mesh(nodeGeo, nodeMat);
+        startNode.position.copy(start);
+        const endNode = new THREE.Mesh(nodeGeo, nodeMat);
+        endNode.position.copy(end);
+        
+        globeScene.add(startNode);
+        globeScene.add(endNode);
+    }
+}
+
+function latLongToVector3(lat, lon, radius) {
+    const phi = (90 - lat) * (Math.PI / 180);
+    const theta = (lon + 180) * (Math.PI / 180);
+    return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+         radius * Math.cos(phi),
+         radius * Math.sin(phi) * Math.sin(theta)
+    );
 }
 
 function addGlobeGridLines() {
