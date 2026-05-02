@@ -3,6 +3,7 @@ Authentication router — Register, Login, and Get Current User.
 Uses JWT tokens for session management.
 """
 
+import re
 import jwt
 import os
 from datetime import datetime, timedelta, timezone
@@ -77,6 +78,23 @@ def extract_token(authorization: str) -> int:
 @router.post("/register", response_model=TokenResponse)
 async def register(data: UserCreate, db: asyncpg.Connection = Depends(get_db)):
     """Create a new user account."""
+    # Validate username format (alphanumeric + underscores)
+    if not re.match(r'^[a-zA-Z0-9_]+$', data.username):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username may only contain letters, numbers, and underscores"
+        )
+
+    # Validate password strength (8+ chars, letter, number, special char)
+    if len(data.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    if not re.search(r'[A-Za-z]', data.password):
+        raise HTTPException(status_code=422, detail="Password must contain at least one letter")
+    if not re.search(r'[0-9]', data.password):
+        raise HTTPException(status_code=422, detail="Password must contain at least one number")
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?]', data.password):
+        raise HTTPException(status_code=422, detail="Password must contain at least one special character")
+
     # Check if email or username already exists
     existing = await db.fetchrow(
         "SELECT id FROM users WHERE email = $1 OR username = $2",
