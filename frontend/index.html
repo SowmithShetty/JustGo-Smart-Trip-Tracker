@@ -136,6 +136,17 @@
                 <button type="submit" id="auth-submit-btn" class="btn btn-primary btn-full">
                     Create Account
                 </button>
+                
+                <div class="auth-divider" style="display:flex; align-items:center; margin:var(--space-md) 0; color:var(--text-tertiary); font-size:0.75rem;">
+                    <div style="flex:1; height:1px; background:var(--border-color);"></div>
+                    <span style="padding:0 var(--space-sm);">OR</span>
+                    <div style="flex:1; height:1px; background:var(--border-color);"></div>
+                </div>
+
+                <div id="google-signin-btn" style="display:flex; justify-content:center; margin-bottom:var(--space-md);">
+                    <!-- Google button will render here -->
+                </div>
+
                 <p class="auth-toggle text-secondary">
                     <span id="auth-toggle-text">Already have an account?</span>
                     <a href="#" id="auth-toggle-link">Sign In</a>
@@ -147,6 +158,7 @@
     <!-- ── Scripts ─────────────────────────────────── -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <!-- Global 3D Background -->
     <script type="module" src="/js/background.js"></script>

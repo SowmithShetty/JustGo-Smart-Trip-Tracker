@@ -3,6 +3,11 @@ Authentication router — Register, Login, and Get Current User.
 Uses JWT tokens for session management.
 """
 
+"""
+Authentication router — Register, Login, and Get Current User.
+Uses JWT tokens for session management.
+"""
+
 import re
 import jwt
 import os
@@ -10,9 +15,11 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from passlib.context import CryptContext
 import asyncpg
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from database import get_db
-from models import UserCreate, UserLogin, UserResponse, TokenResponse
+from models import UserCreate, UserLogin, GoogleLogin, UserResponse, TokenResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -21,6 +28,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SECRET_KEY = os.getenv("JWT_SECRET", "justgo-super-secret-key-change-in-prod")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 72
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -176,3 +184,69 @@ async def get_me(
         theme=user["theme"],
         created_at=str(user["created_at"]),
     )
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(login_data: GoogleLogin, db: asyncpg.Connection = Depends(get_db)):
+    """Authenticate or register user via Google ID Token."""
+    try:
+        # 1. Verify Google token
+        idinfo = id_token.verify_oauth2_token(
+            login_data.credential, 
+            google_requests.Request(), 
+            GOOGLE_CLIENT_ID
+        )
+        
+        email = idinfo.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Google token missing email")
+            
+        username = idinfo.get("email").split('@')[0] # Basic username from email
+        
+        # Strip invalid characters for username
+        username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:30]
+        if len(username) < 3:
+            username = username + "123"
+
+        # 2. Check if user exists
+        user = await db.fetchrow("SELECT * FROM users WHERE email = $1", email)
+        
+        if not user:
+            # 3. Create new user if they don't exist
+            # Try to ensure username is unique
+            base_username = username
+            counter = 1
+            while await db.fetchrow("SELECT id FROM users WHERE username = $1", username):
+                username = f"{base_username[:27]}{counter}"
+                counter += 1
+                
+            row = await db.fetchrow(
+                """
+                INSERT INTO users (username, email, password_hash, auth_provider)
+                VALUES ($1, $2, NULL, 'google')
+                RETURNING id, username, email, units, theme, created_at
+                """,
+                username, email
+            )
+            user = row
+            
+        # 4. Generate our own JWT token
+        token = create_token(user["id"])
+        
+        return TokenResponse(
+            access_token=token,
+            user=UserResponse(
+                id=user["id"],
+                username=user["username"],
+                email=user["email"],
+                units=user["units"],
+                theme=user["theme"],
+                created_at=str(user["created_at"]),
+            )
+        )
+        
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid Google token: {str(e)}",
+        )
