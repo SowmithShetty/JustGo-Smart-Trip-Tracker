@@ -49,11 +49,18 @@ async def init_db():
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
+                password_hash TEXT,
+                auth_provider TEXT DEFAULT 'local',
                 units TEXT DEFAULT 'km',
                 theme TEXT DEFAULT 'dark',
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        """)
+
+        # Migration: Add auth_provider and drop NOT NULL from password_hash for existing tables
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT 'local';
+            ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
         """)
 
         await conn.execute("""
