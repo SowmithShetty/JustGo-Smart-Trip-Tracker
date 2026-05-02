@@ -45,13 +45,21 @@ function headers(extra = {}) {
     return h;
 }
 
-/** Generic API call */
-async function apiCall(method, path, body = null) {
+/** Generic API call with auto-retry on 401 (token expired) */
+async function apiCall(method, path, body = null, _retried = false) {
     const opts = { method, headers: headers() };
     if (body) opts.body = JSON.stringify(body);
 
     try {
         const resp = await fetch(`${API_BASE}${path}`, opts);
+
+        // Handle 401 — token expired or invalid
+        if (resp.status === 401 && !_retried) {
+            // Clear stale auth and signal user needs to re-authenticate
+            clearAuth();
+            throw new Error('Session expired. Please sign in again.');
+        }
+
         const data = await resp.json();
 
         if (!resp.ok) {

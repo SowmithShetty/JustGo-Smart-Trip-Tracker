@@ -130,8 +130,11 @@ export function render(container, { onNavigate, tripData }) {
 
     renderSummaryMap(data.points);
 
-    document.getElementById('save-trip-btn')?.addEventListener('click', async () => {
+    // ── Save Trip Handler ──
+    const saveTrip = async () => {
         if (!isAuthenticated()) {
+            // Mark that we want to save after auth completes
+            window._justgoPendingSave = true;
             window.dispatchEvent(new CustomEvent('justgo:showAuth'));
             return;
         }
@@ -155,6 +158,7 @@ export function render(container, { onNavigate, tripData }) {
             };
             await createTrip(tripPayload);
             sessionStorage.removeItem('justgo_trip_result');
+            window._justgoPendingSave = false;
             window.dispatchEvent(new CustomEvent('justgo:toast', { detail: { message: '✅ Trip saved! Insights generated.', type: 'success' } }));
             onNavigate('history');
         } catch (err) {
@@ -163,7 +167,19 @@ export function render(container, { onNavigate, tripData }) {
             if (discard) discard.style.display = '';
             window.dispatchEvent(new CustomEvent('justgo:toast', { detail: { message: err.message, type: 'error' } }));
         }
-    });
+    };
+
+    document.getElementById('save-trip-btn')?.addEventListener('click', saveTrip);
+
+    // Auto-retry save after successful authentication
+    const authCompleteHandler = () => {
+        if (window._justgoPendingSave) {
+            saveTrip();
+        }
+    };
+    window.addEventListener('justgo:authComplete', authCompleteHandler);
+    // Store handler reference for cleanup
+    window._justgoAuthHandler = authCompleteHandler;
 
     document.getElementById('discard-trip-btn')?.addEventListener('click', () => {
         sessionStorage.removeItem('justgo_trip_result');
@@ -188,6 +204,12 @@ export function render(container, { onNavigate, tripData }) {
 
 export function cleanup() {
     if (map) { map.remove(); map = null; }
+    // Remove auth complete listener
+    if (window._justgoAuthHandler) {
+        window.removeEventListener('justgo:authComplete', window._justgoAuthHandler);
+        window._justgoAuthHandler = null;
+    }
+    window._justgoPendingSave = false;
 }
 
 function renderSummaryMap(points) {

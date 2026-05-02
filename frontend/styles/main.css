@@ -592,6 +592,144 @@ h3 { font-size: 1.25rem; }
 
 .auth-toggle a { font-weight: 700; margin-left: var(--space-xs); color: var(--neon-cyan); }
 
+/* ── Auth Error Banner ─────────────────────────────── */
+
+.auth-error-banner {
+    background: var(--danger-bg);
+    border: 1px solid var(--neon-magenta);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    color: var(--neon-magenta);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    text-align: center;
+    animation: shakeIn 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+    box-shadow: 0 0 16px var(--neon-magenta-glow);
+}
+
+@keyframes shakeIn {
+    0%, 100% { transform: translateX(0); }
+    15%       { transform: translateX(-6px); }
+    30%       { transform: translateX(5px); }
+    45%       { transform: translateX(-4px); }
+    60%       { transform: translateX(3px); }
+    75%       { transform: translateX(-2px); }
+}
+
+/* ── Field Error & Hint ────────────────────────────── */
+
+.field-error {
+    display: none;
+    font-size: 0.75rem;
+    color: var(--neon-magenta);
+    margin-top: 4px;
+    font-weight: 500;
+    padding-left: 2px;
+    animation: fadeSlideIn 0.2s ease;
+}
+
+.field-hint {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+    padding-left: 2px;
+}
+
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Input Validation States ───────────────────────── */
+
+.form-group input.input-error {
+    border-color: var(--neon-magenta) !important;
+    box-shadow: 0 0 0 2px var(--neon-magenta-glow), 0 0 12px rgba(255,45,120,0.08) !important;
+}
+
+.form-group input.input-valid {
+    border-color: var(--neon-green) !important;
+    box-shadow: 0 0 0 2px var(--neon-green-glow), 0 0 12px rgba(0,255,135,0.06) !important;
+}
+
+/* ── Password Input Wrapper ────────────────────────── */
+
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    width: 100%;
+    padding-right: 48px;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 38px;
+    height: 38px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.password-toggle-btn:hover {
+    color: var(--accent);
+    background: rgba(167,139,250,0.08);
+}
+
+.password-toggle-btn:active {
+    transform: translateY(-50%) scale(0.92);
+}
+
+/* ── Password Strength Meter ───────────────────────── */
+
+.password-strength {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: 6px;
+}
+
+.strength-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.strength-fill {
+    height: 100%;
+    border-radius: 2px;
+    width: 0%;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.strength-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    min-width: 50px;
+    text-align: right;
+}
+
 /* ── Neon Divider ───────────────────────────────────── */
 
 .neon-divider {
