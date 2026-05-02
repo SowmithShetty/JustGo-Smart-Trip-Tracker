@@ -6,7 +6,7 @@ Uses JWT tokens for session management.
 import jwt
 import os
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from passlib.context import CryptContext
 import asyncpg
 
@@ -139,7 +139,7 @@ async def login(data: UserLogin, db: asyncpg.Connection = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
-    authorization: str = "",
+    authorization: str = Header(""),
     db: asyncpg.Connection = Depends(get_db)
 ):
     """Get current user from JWT token."""
