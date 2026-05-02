@@ -80,7 +80,14 @@ export async function register(username, email, password) {
     const data = await apiCall('POST', '/api/auth/register', { username, email, password });
     setToken(data.access_token);
     setUser(data.user);
-    return data;
+    return data.user;
+}
+
+export async function googleLogin(credential) {
+    const data = await apiCall('POST', '/api/auth/google', { credential });
+    setToken(data.access_token);
+    setUser(data.user);
+    return data.user;
 }
 
 export async function login(email, password) {

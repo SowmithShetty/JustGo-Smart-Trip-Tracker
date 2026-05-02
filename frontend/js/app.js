@@ -139,6 +139,29 @@ function showAuthModal() {
     // Reset form
     document.getElementById('auth-form')?.reset();
     updatePasswordStrength('');
+
+    // Initialize Google Sign-In
+    if (window.google && window.google.accounts) {
+        window.google.accounts.id.initialize({
+            client_id: "YOUR_GOOGLE_CLIENT_ID", // TODO: Replace with real Client ID
+            callback: handleGoogleCallback
+        });
+        window.google.accounts.id.renderButton(
+            document.getElementById("google-signin-btn"),
+            { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: isRegisterMode ? "signup_with" : "signin_with" }
+        );
+    }
+}
+
+async function handleGoogleCallback(response) {
+    const { googleLogin } = await import('./services/api.js');
+    try {
+        const user = await googleLogin(response.credential);
+        hideAuthModal();
+        window.dispatchEvent(new CustomEvent('justgo:authComplete', { detail: user }));
+    } catch (err) {
+        showAuthError(err.message || 'Google authentication failed');
+    }
 }
 
 function hideAuthModal() {
@@ -173,6 +196,15 @@ function updateAuthMode() {
         if (toggleLink) toggleLink.textContent = 'Create One';
         if (strengthContainer) strengthContainer.style.display = 'none';
         if (passwordHint) passwordHint.style.display = 'none';
+    }
+
+    // Re-render Google button with correct text
+    if (window.google && window.google.accounts && document.getElementById("google-signin-btn").innerHTML !== "") {
+        document.getElementById("google-signin-btn").innerHTML = ""; // clear old button
+        window.google.accounts.id.renderButton(
+            document.getElementById("google-signin-btn"),
+            { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: isRegisterMode ? "signup_with" : "signin_with" }
+        );
     }
 
     clearAllFieldErrors();
