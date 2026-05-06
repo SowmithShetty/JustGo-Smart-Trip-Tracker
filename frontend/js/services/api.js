@@ -1,8 +1,14 @@
 /**
  * API Service — HTTP client wrapper for the JustGo backend.
+ *
+ * In development:  Requests go through Vite proxy (/api → localhost:8000)
+ * In production:   Requests go directly to the Render backend URL
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Smart API_BASE:
+// - In dev (Vite), VITE_API_URL is empty string → requests use relative paths → Vite proxy handles them
+// - In prod, VITE_API_URL is set to the Render backend URL → requests go directly there
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 /** Get stored JWT token */
 function getToken() {
@@ -45,19 +51,26 @@ function headers(extra = {}) {
     return h;
 }
 
-/** Generic API call with auto-retry on 401 (token expired) */
+/** Generic API call with error handling and timeout */
 async function apiCall(method, path, body = null, _retried = false) {
     const opts = { method, headers: headers() };
     if (body) opts.body = JSON.stringify(body);
 
+    // Add a 15-second timeout using AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    opts.signal = controller.signal;
+
     try {
         const resp = await fetch(`${API_BASE}${path}`, opts);
+        clearTimeout(timeoutId);
 
         // Handle 401 — token expired or invalid
         if (resp.status === 401 && !_retried) {
             // Clear stale auth and signal user needs to re-authenticate
             clearAuth();
-            throw new Error('Session expired. Please sign in again.');
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.detail || 'Session expired. Please sign in again.');
         }
 
         const data = await resp.json();
@@ -67,8 +80,13 @@ async function apiCall(method, path, body = null, _retried = false) {
         }
         return data;
     } catch (err) {
+        clearTimeout(timeoutId);
+
+        if (err.name === 'AbortError') {
+            throw new Error('Request timed out. Please check your connection and try again.');
+        }
         if (err.message === 'Failed to fetch') {
-            throw new Error('Cannot connect to server. Is the backend running?');
+            throw new Error('Cannot connect to server. Please check your internet connection or try again later.');
         }
         throw err;
     }
@@ -94,7 +112,7 @@ export async function login(email, password) {
     const data = await apiCall('POST', '/api/auth/login', { email, password });
     setToken(data.access_token);
     setUser(data.user);
-    return data;
+    return data.user;
 }
 
 export async function getMe() {
