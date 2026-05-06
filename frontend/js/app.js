@@ -155,12 +155,22 @@ function showAuthModal() {
 
 async function handleGoogleCallback(response) {
     const { googleLogin } = await import('./services/api.js');
+    const btn = document.getElementById('auth-submit-btn');
+    if (btn) { btn.textContent = 'Signing in with Google…'; btn.disabled = true; }
     try {
         const user = await googleLogin(response.credential);
         hideAuthModal();
+        showToast('Welcome to JustGo! 🎉', 'success');
         window.dispatchEvent(new CustomEvent('justgo:authComplete', { detail: user }));
+        renderPage(getRoute());
     } catch (err) {
-        showAuthError(err.message || 'Google authentication failed');
+        console.error('[Google Auth Error]', err);
+        showAuthError(err.message || 'Google authentication failed. Please try again.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
+        }
     }
 }
 
@@ -370,8 +380,11 @@ function initAuth() {
 
         // ── Submit ──
 
-        if (btn) btn.textContent = 'Loading…';
-        if (btn) btn.disabled = true;
+        const originalBtnText = btn ? btn.textContent : '';
+        if (btn) {
+            btn.textContent = 'Loading…';
+            btn.disabled = true;
+        }
 
         try {
             if (isRegisterMode) {
@@ -387,10 +400,14 @@ function initAuth() {
 
             renderPage(getRoute()); // Re-render current page
         } catch (err) {
-            showAuthError(err.message);
+            console.error('[Auth Error]', err);
+            showAuthError(err.message || 'Authentication failed. Please try again.');
         } finally {
-            if (btn) btn.disabled = false;
-            updateAuthMode();
+            if (btn) {
+                btn.disabled = false;
+                // Explicitly reset button text based on current mode
+                btn.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
+            }
         }
     });
 
