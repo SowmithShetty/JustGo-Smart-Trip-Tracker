@@ -3,17 +3,12 @@ Authentication router — Register, Login, and Get Current User.
 Uses JWT tokens for session management.
 """
 
-"""
-Authentication router — Register, Login, and Get Current User.
-Uses JWT tokens for session management.
-"""
-
 import re
 import jwt
 import os
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header, status
-from passlib.context import CryptContext
 import asyncpg
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -30,17 +25,20 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 72
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "5347821434-t6jr98m948lf5p81mas61fqab2m2jebr.apps.googleusercontent.com")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 # ── Helpers ──────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt directly."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a password against a bcrypt hash."""
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def create_token(user_id: int) -> str:
@@ -142,7 +140,20 @@ async def login(data: UserLogin, db: asyncpg.Connection = Depends(get_db)):
         "SELECT * FROM users WHERE email = $1", data.email
     )
 
-    if not user or not verify_password(data.password, user["password_hash"]):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    # Handle Google-auth users trying to use password login
+    if not user["password_hash"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account uses Google Sign-In. Please use the Google button to log in."
+        )
+
+    if not verify_password(data.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
@@ -250,3 +261,4 @@ async def google_login(login_data: GoogleLogin, db: asyncpg.Connection = Depends
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid Google token: {str(e)}",
         )
+
