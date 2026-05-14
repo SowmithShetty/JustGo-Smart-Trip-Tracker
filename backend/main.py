@@ -53,4 +53,22 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy"}
+    from database import pool
+    return {
+        "status": "healthy",
+        "database": "connected" if pool is not None else "disconnected",
+    }
+
+
+@app.post("/api/reconnect")
+async def reconnect():
+    """Attempt to reconnect to the database (useful after Supabase wakes up)."""
+    from database import pool, init_pool, init_db
+    if pool is not None:
+        return {"status": "already_connected"}
+    await init_pool()
+    await init_db()
+    from database import pool as new_pool
+    if new_pool is not None:
+        return {"status": "reconnected"}
+    return {"status": "failed", "detail": "Could not connect to database"}
