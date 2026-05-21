@@ -7,9 +7,11 @@ import asyncio
 import asyncpg
 import os
 
+# Use Supabase connection pooler (port 6543) for faster, more reliable connections
+# Direct connections (port 5432) are slower and more likely to timeout on free tier
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:Sowmith%402005@db.udbxbqsnhxxotftwhxnz.supabase.co:5432/postgres"
+    "postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
 )
 
 # Global connection pool — initialized in app lifespan
@@ -19,39 +21,87 @@ pool: asyncpg.Pool = None
 MAX_CONNECT_RETRIES = 5
 RETRY_DELAY_SECONDS = 5
 
+# Background task reference
+_bg_connect_task = None
+
+
+async def _try_connect(connect_timeout=15):
+    """Attempt to create a connection pool. Returns True on success."""
+    global pool
+    try:
+        pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=10,
+            statement_cache_size=0,  # Required for Supabase's PgBouncer in transaction mode
+            command_timeout=30,
+            timeout=connect_timeout,
+        )
+        # Quick health check — verify the connection actually works
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        return True
+    except Exception as e:
+        print(f"[WARN] Connection attempt failed: {e}")
+        if pool:
+            try:
+                await pool.close()
+            except Exception:
+                pass
+        pool = None
+        return False
+
+
+async def _background_connect():
+    """Try to connect in the background with retries."""
+    global pool
+    for attempt in range(1, MAX_CONNECT_RETRIES + 1):
+        if pool is not None:
+            return  # Already connected
+        try:
+            success = await _try_connect()
+            if success:
+                print(f"[OK] PostgreSQL connection pool created (attempt {attempt})")
+                await _init_tables()
+                return
+        except Exception as e:
+            pass
+        print(f"[WARN] DB connection attempt {attempt}/{MAX_CONNECT_RETRIES} failed")
+        if attempt < MAX_CONNECT_RETRIES:
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
+
+    print(f"[ERROR] Could not connect to database after {MAX_CONNECT_RETRIES} attempts")
+    print("[WARN] Server running without database. Auth endpoints will return 503.")
+    print("[WARN] Go to Supabase Dashboard to unpause the project, then call POST /api/reconnect")
+
 
 async def init_pool():
-    """Create the asyncpg connection pool with retry logic for paused Supabase projects."""
-    global pool
-    last_error = None
+    """
+    Create the asyncpg connection pool.
+    Makes one quick attempt, then if it fails, starts background retries
+    so the server can start immediately.
+    """
+    global pool, _bg_connect_task
 
-    for attempt in range(1, MAX_CONNECT_RETRIES + 1):
-        try:
-            pool = await asyncpg.create_pool(
-                DATABASE_URL,
-                min_size=1,
-                max_size=10,
-                statement_cache_size=0,  # Required for Supabase's PgBouncer in transaction mode
-                command_timeout=30,
-                timeout=15,             # Connection timeout per attempt
-            )
-            print(f"[OK] PostgreSQL connection pool created (attempt {attempt})")
-            return
-        except Exception as e:
-            last_error = e
-            print(f"[WARN] DB connection attempt {attempt}/{MAX_CONNECT_RETRIES} failed: {e}")
-            if attempt < MAX_CONNECT_RETRIES:
-                print(f"[WARN] Retrying in {RETRY_DELAY_SECONDS}s...")
-                await asyncio.sleep(RETRY_DELAY_SECONDS)
+    # Quick first attempt with short timeout
+    success = await _try_connect(connect_timeout=8)
+    if success:
+        print("[OK] PostgreSQL connection pool created")
+        return
 
-    # All retries exhausted — log the error but don't crash the app
-    print(f"[ERROR] Could not connect to database after {MAX_CONNECT_RETRIES} attempts: {last_error}")
-    print("[WARN] Server will start without database. Auth endpoints will return 503.")
+    print("[WARN] Quick DB connection failed")
+    print("[INFO] Starting background connection retries...")
+
+    # Start background retries so server can begin accepting requests immediately
+    _bg_connect_task = asyncio.create_task(_background_connect())
 
 
 async def close_pool():
     """Close the connection pool gracefully."""
-    global pool
+    global pool, _bg_connect_task
+    if _bg_connect_task and not _bg_connect_task.done():
+        _bg_connect_task.cancel()
+        _bg_connect_task = None
     if pool:
         await pool.close()
         pool = None
@@ -70,10 +120,9 @@ async def get_db():
         yield conn
 
 
-async def init_db():
-    """Create all tables if they don't exist."""
+async def _init_tables():
+    """Create all tables if they don't exist (internal helper)."""
     if pool is None:
-        print("[SKIP] Skipping table creation — no database connection")
         return
 
     async with pool.acquire() as conn:
@@ -90,7 +139,6 @@ async def init_db():
             );
         """)
 
-        # Migration: Add auth_provider and drop NOT NULL from password_hash for existing tables
         await conn.execute("""
             ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT 'local';
             ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
@@ -150,3 +198,11 @@ async def init_db():
         """)
 
     print("[OK] Database tables verified")
+
+
+async def init_db():
+    """Create all tables if they don't exist."""
+    if pool is None:
+        print("[SKIP] Skipping table creation — no database connection yet")
+        return
+    await _init_tables()

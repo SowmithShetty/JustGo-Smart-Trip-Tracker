@@ -7,7 +7,7 @@ import * as trackingPage from './pages/tracking.js';
 import * as summaryPage from './pages/summary.js';
 import * as historyPage from './pages/history.js';
 import * as profilePage from './pages/profile.js';
-import { isAuthenticated, register, login, getUser, getMe, setUser, clearAuth } from './services/api.js';
+import { isAuthenticated, register, login, getUser, getMe, setUser, clearAuth, setStatusCallback } from './services/api.js';
 import { getLocalSettings } from './services/storage.js';
 
 // ── Page Registry ──────────────────────────────────────
@@ -156,20 +156,43 @@ function showAuthModal() {
 async function handleGoogleCallback(response) {
     const { googleLogin } = await import('./services/api.js');
     const btn = document.getElementById('auth-submit-btn');
-    if (btn) { btn.textContent = 'Signing in with Google…'; btn.disabled = true; }
+    const statusEl = document.getElementById('auth-status-text');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="auth-spinner"></span> Connecting…';
+        btn.classList.add('btn-loading');
+    }
+    if (statusEl) {
+        statusEl.textContent = 'Signing in with Google…';
+        statusEl.style.display = 'block';
+    }
+
+    // Wire up status messages
+    setStatusCallback((msg, phase) => {
+        if (statusEl && msg) statusEl.textContent = msg;
+        if (btn && msg) btn.innerHTML = `<span class="auth-spinner"></span> ${msg}`;
+    });
+
     try {
         const user = await googleLogin(response.credential);
-        hideAuthModal();
-        showToast('Welcome to JustGo! 🎉', 'success');
-        window.dispatchEvent(new CustomEvent('justgo:authComplete', { detail: user }));
-        renderPage(getRoute());
+        if (btn) btn.innerHTML = '<span class="auth-check">✓</span> Success!';
+        if (statusEl) statusEl.textContent = 'Welcome!';
+        setTimeout(() => {
+            hideAuthModal();
+            showToast('Welcome to JustGo! 🎉', 'success');
+            window.dispatchEvent(new CustomEvent('justgo:authComplete', { detail: user }));
+            renderPage(getRoute());
+        }, 400);
     } catch (err) {
         console.error('[Google Auth Error]', err);
         showAuthError(err.message || 'Google authentication failed. Please try again.');
     } finally {
+        setStatusCallback(null);
+        if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
         if (btn) {
             btn.disabled = false;
-            btn.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
+            btn.classList.remove('btn-loading');
+            btn.innerHTML = isRegisterMode ? 'Create Account' : 'Sign In';
         }
     }
 }
@@ -381,10 +404,22 @@ function initAuth() {
         // ── Submit ──
 
         const originalBtnText = btn ? btn.textContent : '';
+        const statusEl = document.getElementById('auth-status-text');
         if (btn) {
-            btn.textContent = 'Loading…';
+            btn.innerHTML = '<span class="auth-spinner"></span> Connecting…';
             btn.disabled = true;
+            btn.classList.add('btn-loading');
         }
+        if (statusEl) {
+            statusEl.textContent = 'Connecting to server…';
+            statusEl.style.display = 'block';
+        }
+
+        // Wire up live status messages from the API layer
+        setStatusCallback((msg, phase) => {
+            if (statusEl && msg) statusEl.textContent = msg;
+            if (btn && msg) btn.innerHTML = `<span class="auth-spinner"></span> ${msg}`;
+        });
 
         try {
             if (isRegisterMode) {
@@ -392,21 +427,27 @@ function initAuth() {
             } else {
                 await login(email, password);
             }
-            hideAuthModal();
-            showToast('Welcome to JustGo! 🎉', 'success');
 
-            // Dispatch auth complete event so pending actions can retry
-            window.dispatchEvent(new CustomEvent('justgo:authComplete'));
+            // Brief success animation before closing
+            if (btn) btn.innerHTML = '<span class="auth-check">✓</span> Success!';
+            if (statusEl) statusEl.textContent = 'Welcome!';
 
-            renderPage(getRoute()); // Re-render current page
+            setTimeout(() => {
+                hideAuthModal();
+                showToast('Welcome to JustGo! 🎉', 'success');
+                window.dispatchEvent(new CustomEvent('justgo:authComplete'));
+                renderPage(getRoute());
+            }, 400);
         } catch (err) {
             console.error('[Auth Error]', err);
             showAuthError(err.message || 'Authentication failed. Please try again.');
         } finally {
+            setStatusCallback(null);
+            if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; }
             if (btn) {
                 btn.disabled = false;
-                // Explicitly reset button text based on current mode
-                btn.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
+                btn.classList.remove('btn-loading');
+                btn.innerHTML = isRegisterMode ? 'Create Account' : 'Sign In';
             }
         }
     });

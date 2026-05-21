@@ -51,12 +51,36 @@ async def root():
     }
 
 
-@app.get("/api/health")
-async def health():
+@app.get("/api/wake")
+async def wake():
+    """Ultra-lightweight endpoint for pre-warming the Render server.
+    Frontend calls this before auth to wake the server from sleep."""
     from database import pool
     return {
+        "status": "awake",
+        "db": "ready" if pool is not None else "connecting",
+    }
+
+
+@app.get("/api/health")
+async def health():
+    import time
+    from database import pool
+    db_status = "disconnected"
+    db_latency_ms = None
+    if pool is not None:
+        try:
+            t0 = time.monotonic()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
+            db_status = "connected"
+        except Exception:
+            db_status = "error"
+    return {
         "status": "healthy",
-        "database": "connected" if pool is not None else "disconnected",
+        "database": db_status,
+        "db_latency_ms": db_latency_ms,
     }
 
 
