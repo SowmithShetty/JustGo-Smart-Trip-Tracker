@@ -781,6 +781,150 @@
 
 /* ── Responsive ─────────────────────────────────────── */
 
+/* ── Mode-Specific Tracking HUD ────────────────────── */
+
+.tracking-badge-wrap {
+    position: fixed;
+    top: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    pointer-events: none;
+}
+
+.tracking-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 20px;
+    border-radius: 30px;
+    backdrop-filter: blur(16px);
+    border: 1px solid;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    animation: badgeIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tracking-badge-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    animation: gpsPulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+.tracking-badge-icon {
+    font-size: 0.85rem;
+}
+
+.tracking-badge-sep {
+    opacity: 0.4;
+}
+
+.tracking-badge-live {
+    animation: liveBlink 2.5s ease-in-out infinite;
+}
+
+@keyframes badgeIn {
+    from { opacity: 0; transform: translateY(-12px) scale(0.9); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes liveBlink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+
+/* ── Motivational Banner ───────────────────────────── */
+
+.motive-banner {
+    position: fixed;
+    top: 130px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    pointer-events: none;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: opacity 0.4s ease;
+    animation: motiveFloat 4s ease-in-out infinite;
+    white-space: nowrap;
+}
+
+@keyframes motiveFloat {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50%      { transform: translateX(-50%) translateY(-3px); }
+}
+
+/* ── Tracking HUD Panel ────────────────────────────── */
+
+.tracking-hud-wrap {
+    position: fixed;
+    bottom: 80px;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 0 var(--space-md);
+}
+
+.tracking-hud {
+    backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid;
+    border-radius: var(--radius-lg);
+    padding: 0 var(--space-md) var(--space-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+/* HUD corner decorations */
+.hud-corner {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-width: 2px;
+    border-style: solid;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.hud-corner-tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: var(--radius-lg) 0 0 0; }
+.hud-corner-tr { top: 0; right: 0; border-left: none; border-bottom: none; border-radius: 0 var(--radius-lg) 0 0; }
+.hud-corner-bl { bottom: 0; left: 0; border-right: none; border-top: none; border-radius: 0 0 0 var(--radius-lg); }
+.hud-corner-br { bottom: 0; right: 0; border-left: none; border-top: none; border-radius: 0 0 var(--radius-lg) 0; }
+
+.hud-scanline {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* Mode name strip */
+.hud-mode-strip {
+    text-align: center;
+    padding: 6px 0;
+    margin-bottom: var(--space-xs);
+}
+
+/* Drive max-speed / Run pace row */
+.hud-max-speed {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-xs);
+}
+
+/* ── Responsive ────────────────────────────────────── */
+
 @media (max-width: 768px) {
     .stats-hud { grid-template-columns: repeat(3, 1fr); gap: var(--space-sm); }
     .stat-value { font-size: 1.6rem; }
@@ -793,4 +937,7 @@
     .toast-container { top: var(--space-sm); right: var(--space-sm); left: var(--space-sm); }
     .toast { max-width: 100%; }
     .start-btn-container { padding: 40px 0; }
+    .tracking-badge-wrap { top: 12px; }
+    .motive-banner { top: 56px; font-size: 0.6rem; }
+    .tracking-hud-wrap { bottom: 70px; }
 }
