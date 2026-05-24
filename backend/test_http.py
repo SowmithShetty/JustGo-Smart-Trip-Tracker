@@ -2,9 +2,9 @@ import requests
 import time
 
 urls = [
-    "https://justgo-api.onrender.com/",
-    "https://justgo-api.onrender.com/api/wake",
-    "https://justgo-api.onrender.com/api/health",
+    "https://justgo-backend-jzjb.onrender.com/",
+    "https://justgo-backend-jzjb.onrender.com/api/wake",
+    "https://justgo-backend-jzjb.onrender.com/api/health",
     "https://just-go-smart-trip-tracker-2zh7.vercel.app/"
 ]
 
