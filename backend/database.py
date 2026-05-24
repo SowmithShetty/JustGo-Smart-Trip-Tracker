@@ -7,11 +7,11 @@ import asyncio
 import asyncpg
 import os
 
-# Use Supabase direct connection (port 5432) since the regional pooler (port 6543)
-# can experience DNS/routing failures (e.g. "tenant not found").
+# Use Supabase Session Pooler (port 5432) which is IPv4 compatible
+# (Direct connection is IPv6-only and not supported on Render free tier).
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:Sowmith%402005@db.udbxbqsnhxxotftwhxnz.supabase.co:5432/postgres"
+    "postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
 )
 
 # Global connection pool — initialized in app lifespan
