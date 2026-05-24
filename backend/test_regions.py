@@ -2,7 +2,6 @@ import asyncio
 import asyncpg
 import socket
 
-# List of all possible Supabase AWS pooler regions
 regions = [
     "ap-south-1",      # Mumbai
     "ap-southeast-1",  # Singapore
@@ -23,35 +22,26 @@ regions = [
 
 async def test_region(region):
     host = f"aws-0-{region}.pooler.supabase.com"
-    # Resolve IPv4
     try:
         ip = socket.gethostbyname(host)
     except Exception:
+        print(f"{region}: Could not resolve host {host}")
         return None
     
     url = f"postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@{host}:6543/postgres"
     try:
-        conn = await asyncpg.connect(url, timeout=5)
+        conn = await asyncpg.connect(url, timeout=6)
         await conn.close()
+        print(f"--> {region} CONNECTED SUCCESSFULLY! <--")
         return host
     except Exception as e:
-        # If the error is 'tenant not found', it's wrong region. 
-        # If it succeeds or has another error (like auth failed), we inspect.
-        err_str = str(e)
-        if "tenant/user" not in err_str:
-            print(f"Region {region} ({host}) returned unexpected error: {err_str}")
+        print(f"{region}: {e}")
         return None
 
 async def main():
-    print("Scanning regions for correct Supabase pooler...")
+    print("Scanning regions...")
     tasks = [test_region(r) for r in regions]
-    results = await asyncio.gather(*tasks)
-    
-    successful = [r for r in results if r is not None]
-    if successful:
-        print(f"\nSUCCESS! Found working pooler host(s): {successful}")
-    else:
-        print("\nFailed to find any working regional pooler host.")
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())
