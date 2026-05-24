@@ -7,11 +7,11 @@ import asyncio
 import asyncpg
 import os
 
-# Use Supabase connection pooler (port 6543) for faster, more reliable connections
-# Direct connections (port 5432) are slower and more likely to timeout on free tier
+# Use Supabase direct connection (port 5432) since the regional pooler (port 6543)
+# can experience DNS/routing failures (e.g. "tenant not found").
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+    "postgresql://postgres:Sowmith%402005@db.udbxbqsnhxxotftwhxnz.supabase.co:5432/postgres"
 )
 
 # Global connection pool — initialized in app lifespan
