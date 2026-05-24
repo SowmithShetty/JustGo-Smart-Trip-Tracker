@@ -2,9 +2,8 @@ import asyncio
 import asyncpg
 
 async def main():
-    # Test connection to the pooler on the direct host
-    url = "postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@db.udbxbqsnhxxotftwhxnz.supabase.co:6543/postgres"
-    print("Testing connection to direct pooler host db.udbxbqsnhxxotftwhxnz.supabase.co:6543...")
+    url = "postgresql://postgres:Sowmith%402005@db.udbxbqsnhxxotftwhxnz.supabase.co:6543/postgres"
+    print("Testing connection with user postgres on db.udbxbqsnhxxotftwhxnz.supabase.co:6543...")
     try:
         conn = await asyncpg.connect(url, timeout=10)
         val = await conn.fetchval("SELECT 1")
