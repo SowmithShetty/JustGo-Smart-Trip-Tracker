@@ -2,12 +2,15 @@
 JustGo Backend — FastAPI application entry point.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_pool, close_pool, init_db
-from routers import auth, trips, users
+from routers import auth, trips, users, ai
 
 
 @asynccontextmanager
@@ -40,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(trips.router)
 app.include_router(users.router)
+app.include_router(ai.router)
 
 
 @app.get("/")

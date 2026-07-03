@@ -279,3 +279,14 @@ export async function updateSettings(settings) {
     setUser(data);
     return data;
 }
+
+// ── AI Coach Endpoints ────────────────────────────────
+
+export async function getAICoaching(tripId) {
+    return apiCall('GET', `/api/ai/coach/${tripId}`);
+}
+
+export async function analyzeTrip(tripData) {
+    await wakeServer();
+    return apiCall('POST', '/api/ai/analyze', tripData);
+}

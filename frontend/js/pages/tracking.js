@@ -142,7 +142,7 @@ export function render(container, { onNavigate }) {
                     <!-- Stats -->
                     <div class="stats-hud" style="margin-bottom:var(--space-sm);">
                         <div class="stat-card">
-                            <div class="stat-value" id="live-speed" style="color:${theme.statColor}; text-shadow: 0 0 20px ${theme.color}50;">0.0</div>
+                            <div class="stat-value" id="live-speed" style="color:${theme.statColor}; text-shadow: 0 0 20px ${theme.color}50;">${'0.0'}</div>
                             <div class="stat-label">${settings.units === 'mi' ? 'MPH' : 'KM/H'}</div>
                         </div>
                         <div class="stat-card">
@@ -154,6 +154,14 @@ export function render(container, { onNavigate }) {
                             <div class="stat-label">TIME</div>
                         </div>
                     </div>
+
+                    ${mode === 'walk' || mode === 'run' ? `
+                    <!-- Walk/Run: Step Counter -->
+                    <div class="hud-max-speed" style="border-top:1px solid ${theme.color}15;">
+                        <span style="color:var(--text-tertiary); font-family:var(--font-mono); font-size:0.6rem; letter-spacing:0.1em;">👟 STEPS</span>
+                        <span id="step-count-val" style="color:${theme.color}; font-family:var(--font-mono); font-size:0.85rem; font-weight:700;">0</span>
+                    </div>
+                    ` : ''}
 
                     ${mode === 'drive' ? `
                     <!-- Drive-only: Max Speed -->
@@ -333,8 +341,15 @@ function startTracking(mode, theme) {
             }
 
             cacheTrackingSession(t.points, { mode });
+
+            // Walk/Run: update step count
+            if (mode === 'walk' || mode === 'run') {
+                const stepEl = document.getElementById('step-count-val');
+                if (stepEl) stepEl.textContent = t.stepCount.toLocaleString();
+            }
         },
-        (msg) => console.error('GPS Error:', msg)
+        (msg) => console.error('GPS Error:', msg),
+        mode
     );
     tracker.start();
 }

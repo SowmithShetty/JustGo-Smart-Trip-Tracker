@@ -90,3 +90,14 @@ class TripDetailResponse(BaseModel):
     trip: TripResponse
     gps_points: List[GPSPoint]
     anomalies: List[AnomalyResponse]
+
+
+class TripAnalyzeRequest(BaseModel):
+    """Request body for AI analysis of raw (unsaved) trip data."""
+    mode: str = Field(default="walk", pattern="^(walk|run|drive)$")
+    started_at: str
+    ended_at: str
+    total_distance_km: float = 0
+    duration_seconds: int = 0
+    step_count: Optional[int] = 0
+    gps_points: List[GPSPoint]

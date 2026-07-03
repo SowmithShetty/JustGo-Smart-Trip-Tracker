@@ -28,8 +28,8 @@ export function formatDuration(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-    return `${m}:${String(s).padStart(2,'0')}`;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 /** Format distance with appropriate units */
@@ -49,11 +49,37 @@ export function formatSpeed(kmh, units = 'km') {
 
 /**
  * GeoTracker class — manages GPS tracking session.
+ *
+ * @param {Function} onUpdate - Callback on each valid GPS point
+ * @param {Function} onError  - Callback on GPS errors
+ * @param {string}   mode     - Travel mode: 'walk' | 'run' | 'drive'
  */
+
+// Mode-specific jitter thresholds (in km).
+// Walk needs a very small threshold because consecutive GPS readings
+// at walking speed are often < 2m apart — the old 2m blanket filter
+// silently discarded nearly every point during a walk.
+const JITTER_THRESHOLDS = {
+    walk: 0.0005,   // 0.5 m — walking is slow; even half-metre moves are real
+    run: 0.0015,   // 1.5 m
+    drive: 0.003,    // 3.0 m — cars move fast; small jumps are noise
+};
+
+// Steps per km by mode (based on average stride length).
+// Walk: avg stride ~0.762 m → 1312 steps/km
+// Run:  avg stride ~0.914 m → 1094 steps/km
+// Drive: N/A (no step counting)
+const STEPS_PER_KM = {
+    walk: 1312,
+    run: 1094,
+};
+
 export class GeoTracker {
-    constructor(onUpdate, onError) {
+    constructor(onUpdate, onError, mode = 'walk') {
         this.onUpdate = onUpdate;
         this.onError = onError;
+        this.mode = mode;
+        this.jitterThreshold = JITTER_THRESHOLDS[mode] ?? JITTER_THRESHOLDS.walk;
         this.watchId = null;
         this.points = [];
         this.startTime = null;
@@ -62,6 +88,8 @@ export class GeoTracker {
         this.totalPausedMs = 0;      // accumulated paused milliseconds
         this.totalDistance = 0;
         this.currentSpeed = 0;
+        this.stepCount = 0;          // estimated step count (walk/run only)
+        this.stepsPerKm = STEPS_PER_KM[mode] || 0;
     }
 
     start() {
@@ -74,6 +102,7 @@ export class GeoTracker {
         this.points = [];
         this.totalDistance = 0;
         this.currentSpeed = 0;
+        this.stepCount = 0;
         this.totalPausedMs = 0;
         this.pausedAt = null;
 
@@ -121,6 +150,7 @@ export class GeoTracker {
             duration: this.getElapsed(),
             startTime: this.startTime?.toISOString(),
             endTime: new Date().toISOString(),
+            stepCount: this.stepCount,
         };
     }
 
@@ -147,12 +177,17 @@ export class GeoTracker {
             const prev = this.points[this.points.length - 1];
             const dist = haversine(prev.latitude, prev.longitude, point.latitude, point.longitude);
 
-            // Filter out GPS jitter (ignore jumps < 2m)
-            if (dist < 0.002) return;
+            // Filter out GPS jitter — threshold is mode-aware
+            if (dist < this.jitterThreshold) return;
 
             this.totalDistance += dist;
             this.currentSpeed = calcSpeed(prev, point);
             point.speed_kmh = this.currentSpeed;
+
+            // Increment step count for walk/run modes
+            if (this.stepsPerKm > 0) {
+                this.stepCount += Math.round(dist * this.stepsPerKm);
+            }
         }
 
         this.points.push(point);
