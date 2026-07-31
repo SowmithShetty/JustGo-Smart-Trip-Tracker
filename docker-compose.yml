@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+# JustGo Smart Trip Planner — Docker Compose
+# Start everything:  docker compose up --build
+# Stop everything:   docker compose down
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ───── FastAPI Backend ─────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: justgo-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres.udbxbqsnhxxotftwhxnz:Sowmith%402005@aws-1-ap-south-1.pooler.supabase.com:5432/postgres}
+      - JWT_SECRET=${JWT_SECRET:-justgo-docker-dev-secret}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - justgo-network
+
+  # ───── Vite Frontend (Nginx) ─────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: justgo-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - justgo-network
+
+networks:
+  justgo-network:
+    driver: bridge

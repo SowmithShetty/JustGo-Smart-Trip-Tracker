@@ -1,0 +1,34 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+
+# Database
+*.db
+*.sqlite3
+
+# Environment / Secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Dev scripts
+find_api_url.py
+inspect_trip.py
+
+# Docker
+Dockerfile
+.dockerignore

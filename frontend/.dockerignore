@@ -1,0 +1,21 @@
+# Dependencies (will be installed fresh inside the container)
+node_modules/
+
+# Build output
+dist/
+
+# Environment / Secrets
+.env.*
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
