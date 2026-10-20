@@ -10,12 +10,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_pool, close_pool, init_db
+
 from routers import auth, trips, users, ai
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database pool on startup, close on shutdown."""
+    """Initialize database on startup, close on shutdown."""
     await init_pool()
     await init_db()
     print("[OK] Database initialized")
@@ -57,46 +58,40 @@ async def root():
 
 @app.get("/api/wake")
 async def wake():
-    """Ultra-lightweight endpoint for pre-warming the Render server.
-    Frontend calls this before auth to wake the server from sleep."""
-    from database import pool
+    """Ultra-lightweight endpoint for pre-warming the server."""
+    from database import db
     return {
         "status": "awake",
-        "db": "ready" if pool is not None else "connecting",
+        "db": "ready" if db is not None else "connecting",
     }
 
 
 @app.get("/api/health")
 async def health():
-    import time
-    from database import pool
+    from database import db
     db_status = "disconnected"
-    db_latency_ms = None
-    if pool is not None:
+    if db is not None:
         try:
-            t0 = time.monotonic()
-            async with pool.acquire() as conn:
-                await conn.fetchval("SELECT 1")
-            db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
+            cursor = await db.execute("SELECT 1")
+            await cursor.fetchone()
             db_status = "connected"
         except Exception:
             db_status = "error"
     return {
         "status": "healthy",
         "database": db_status,
-        "db_latency_ms": db_latency_ms,
     }
 
 
 @app.post("/api/reconnect")
 async def reconnect():
-    """Attempt to reconnect to the database (useful after Supabase wakes up)."""
-    from database import pool, init_pool, init_db
-    if pool is not None:
+    """Attempt to reconnect to the database."""
+    from database import db, init_pool, init_db
+    if db is not None:
         return {"status": "already_connected"}
     await init_pool()
     await init_db()
-    from database import pool as new_pool
-    if new_pool is not None:
+    from database import db as new_db
+    if new_db is not None:
         return {"status": "reconnected"}
     return {"status": "failed", "detail": "Could not connect to database"}

@@ -8,7 +8,7 @@ import json
 import time
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Header
-import asyncpg
+import aiosqlite
 
 from database import get_db
 from routers.auth import extract_token
@@ -34,6 +34,13 @@ def _check_rate_limit(user_id: int):
             detail=f"Rate limit reached. You can make {RATE_LIMIT_MAX} AI coaching requests per hour. Please try again later."
         )
     _rate_limits[user_id].append(now)
+
+
+def _row_to_dict(row):
+    """Convert an aiosqlite Row to a dict."""
+    if row is None:
+        return None
+    return dict(row)
 
 
 # ── Prompt Construction ──────────────────────────────
@@ -123,7 +130,7 @@ IMPORTANT RULES:
 async def get_ai_coaching(
     trip_id: int,
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db),
+    db: aiosqlite.Connection = Depends(get_db),
 ):
     """
     Generate AI coaching insights for a specific trip.
@@ -143,18 +150,19 @@ async def get_ai_coaching(
         )
 
     # Fetch trip
-    trip = await db.fetchrow(
-        "SELECT * FROM trips WHERE id = $1 AND user_id = $2",
-        trip_id, user_id,
+    cursor = await db.execute(
+        "SELECT * FROM trips WHERE id = ? AND user_id = ?",
+        (trip_id, user_id),
     )
+    trip = _row_to_dict(await cursor.fetchone())
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
     # Fetch GPS points
-    points_rows = await db.fetch(
+    cursor = await db.execute(
         "SELECT latitude, longitude, altitude, speed_kmh, recorded_at, sequence_order "
-        "FROM gps_points WHERE trip_id = $1 ORDER BY sequence_order",
-        trip_id,
+        "FROM gps_points WHERE trip_id = ? ORDER BY sequence_order",
+        (trip_id,),
     )
     points = [
         {
@@ -165,14 +173,14 @@ async def get_ai_coaching(
             "recorded_at": str(p["recorded_at"]),
             "sequence_order": p["sequence_order"],
         }
-        for p in points_rows
+        for p in await cursor.fetchall()
     ]
 
     # Fetch anomalies
-    anomaly_rows = await db.fetch(
+    cursor = await db.execute(
         "SELECT latitude, longitude, speed_kmh, baseline_speed_kmh, reason, detail, occurred_at "
-        "FROM anomalies WHERE trip_id = $1",
-        trip_id,
+        "FROM anomalies WHERE trip_id = ?",
+        (trip_id,),
     )
     anomalies = [
         {
@@ -184,7 +192,7 @@ async def get_ai_coaching(
             "detail": a["detail"],
             "occurred_at": str(a["occurred_at"]),
         }
-        for a in anomaly_rows
+        for a in await cursor.fetchall()
     ]
 
     # Build trip dict
@@ -272,7 +280,7 @@ async def get_ai_coaching(
 async def analyze_raw_trip(
     data: TripAnalyzeRequest,
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db),
+    db: aiosqlite.Connection = Depends(get_db),
 ):
     """
     Analyze raw trip data (before saving) using the analysis engine + Gemini.
@@ -388,4 +396,3 @@ async def analyze_raw_trip(
             status_code=500,
             detail=f"AI analysis failed: {error_msg}"
         )
-

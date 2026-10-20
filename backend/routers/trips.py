@@ -5,7 +5,7 @@ Trips router — Create, list, get details, and delete trips.
 import json
 from fastapi import APIRouter, Depends, HTTPException, Header
 from typing import Optional
-import asyncpg
+import aiosqlite
 
 from database import get_db
 from models import TripCreate, TripResponse, TripDetailResponse, GPSPoint, AnomalyResponse
@@ -15,11 +15,18 @@ from analysis import analyze_trip
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 
 
+def _row_to_dict(row):
+    """Convert an aiosqlite Row to a dict."""
+    if row is None:
+        return None
+    return dict(row)
+
+
 @router.post("", response_model=TripResponse)
 async def create_trip(
     data: TripCreate,
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db)
+    db: aiosqlite.Connection = Depends(get_db)
 ):
     """
     Submit a completed trip with GPS data.
@@ -44,45 +51,52 @@ async def create_trip(
     analysis = await analyze_trip(points_dicts)
     stats = analysis["stats"]
 
-    # Use a transaction for multi-table inserts
-    async with db.transaction():
-        # Insert the trip
-        trip = await db.fetchrow(
-            """INSERT INTO trips
-               (user_id, mode, total_distance_km, avg_speed_kmh, max_speed_kmh,
-                duration_seconds, started_at, ended_at, insights_json)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-               RETURNING *""",
-            user_id, data.mode,
-            stats["total_distance_km"], stats["avg_speed_kmh"],
-            stats["max_speed_kmh"], stats["duration_seconds"],
-            data.started_at, data.ended_at,
-            json.dumps(analysis),
+    # Insert the trip
+    cursor = await db.execute(
+        """INSERT INTO trips
+           (user_id, mode, total_distance_km, avg_speed_kmh, max_speed_kmh,
+            duration_seconds, started_at, ended_at, insights_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, data.mode,
+         stats["total_distance_km"], stats["avg_speed_kmh"],
+         stats["max_speed_kmh"], stats["duration_seconds"],
+         data.started_at, data.ended_at,
+         json.dumps(analysis)),
+    )
+    trip_id = cursor.lastrowid
+
+    # Insert GPS points
+    for p in data.gps_points:
+        await db.execute(
+            """INSERT INTO gps_points
+               (trip_id, latitude, longitude, altitude, speed_kmh,
+                recorded_at, sequence_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (trip_id, p.latitude, p.longitude, p.altitude or 0,
+             p.speed_kmh or 0, p.recorded_at, p.sequence_order)
         )
-        trip_id = trip["id"]
 
-        # Insert GPS points
-        for p in data.gps_points:
-            await db.execute(
-                """INSERT INTO gps_points
-                   (trip_id, latitude, longitude, altitude, speed_kmh,
-                    recorded_at, sequence_order)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7)""",
-                trip_id, p.latitude, p.longitude, p.altitude or 0,
-                p.speed_kmh or 0, p.recorded_at, p.sequence_order
-            )
+    # Insert anomalies
+    for a in analysis.get("anomalies", []):
+        await db.execute(
+            """INSERT INTO anomalies
+               (trip_id, latitude, longitude, speed_kmh, baseline_speed_kmh,
+                reason, detail, occurred_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (trip_id, a["latitude"], a["longitude"], a["speed_kmh"],
+             a["baseline_speed_kmh"], a["reason"], a["detail"],
+             a.get("occurred_at", ""))
+        )
 
-        # Insert anomalies
-        for a in analysis.get("anomalies", []):
-            await db.execute(
-                """INSERT INTO anomalies
-                   (trip_id, latitude, longitude, speed_kmh, baseline_speed_kmh,
-                    reason, detail, occurred_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-                trip_id, a["latitude"], a["longitude"], a["speed_kmh"],
-                a["baseline_speed_kmh"], a["reason"], a["detail"],
-                a.get("occurred_at", "")
-            )
+    await db.commit()
+
+    # Fetch the inserted trip to return
+    cursor = await db.execute("SELECT * FROM trips WHERE id = ?", (trip_id,))
+    trip = _row_to_dict(await cursor.fetchone())
+
+    insights = trip["insights_json"]
+    if isinstance(insights, dict):
+        insights = json.dumps(insights)
 
     return TripResponse(
         id=trip["id"],
@@ -94,7 +108,7 @@ async def create_trip(
         duration_seconds=trip["duration_seconds"],
         started_at=str(trip["started_at"]),
         ended_at=str(trip["ended_at"]),
-        insights_json=trip["insights_json"] if isinstance(trip["insights_json"], str) else json.dumps(trip["insights_json"]),
+        insights_json=insights if isinstance(insights, str) else json.dumps(insights),
         created_at=str(trip["created_at"]),
     )
 
@@ -102,15 +116,16 @@ async def create_trip(
 @router.get("", response_model=list[TripResponse])
 async def list_trips(
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db)
+    db: aiosqlite.Connection = Depends(get_db)
 ):
     """List all trips for the authenticated user, newest first."""
     user_id = extract_token(authorization)
 
-    rows = await db.fetch(
-        "SELECT * FROM trips WHERE user_id = $1 ORDER BY created_at DESC",
-        user_id
+    cursor = await db.execute(
+        "SELECT * FROM trips WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,)
     )
+    rows = await cursor.fetchall()
 
     return [
         TripResponse(
@@ -134,30 +149,33 @@ async def list_trips(
 async def get_trip(
     trip_id: int,
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db)
+    db: aiosqlite.Connection = Depends(get_db)
 ):
     """Get full trip details including GPS points and anomalies."""
     user_id = extract_token(authorization)
 
     # Fetch trip
-    trip = await db.fetchrow(
-        "SELECT * FROM trips WHERE id = $1 AND user_id = $2",
-        trip_id, user_id
+    cursor = await db.execute(
+        "SELECT * FROM trips WHERE id = ? AND user_id = ?",
+        (trip_id, user_id)
     )
+    trip = _row_to_dict(await cursor.fetchone())
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
     # Fetch GPS points
-    points = await db.fetch(
-        "SELECT * FROM gps_points WHERE trip_id = $1 ORDER BY sequence_order",
-        trip_id
+    cursor = await db.execute(
+        "SELECT * FROM gps_points WHERE trip_id = ? ORDER BY sequence_order",
+        (trip_id,)
     )
+    points = [_row_to_dict(r) for r in await cursor.fetchall()]
 
     # Fetch anomalies
-    anomalies_rows = await db.fetch(
-        "SELECT * FROM anomalies WHERE trip_id = $1",
-        trip_id
+    cursor = await db.execute(
+        "SELECT * FROM anomalies WHERE trip_id = ?",
+        (trip_id,)
     )
+    anomalies_rows = [_row_to_dict(r) for r in await cursor.fetchall()]
 
     return {
         "trip": {
@@ -203,19 +221,23 @@ async def get_trip(
 async def delete_trip(
     trip_id: int,
     authorization: str = Header(""),
-    db: asyncpg.Connection = Depends(get_db)
+    db: aiosqlite.Connection = Depends(get_db)
 ):
     """Delete a trip and all associated data."""
     user_id = extract_token(authorization)
 
-    trip = await db.fetchrow(
-        "SELECT id FROM trips WHERE id = $1 AND user_id = $2",
-        trip_id, user_id
+    cursor = await db.execute(
+        "SELECT id FROM trips WHERE id = ? AND user_id = ?",
+        (trip_id, user_id)
     )
+    trip = await cursor.fetchone()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    # CASCADE will handle gps_points and anomalies via foreign keys
-    await db.execute("DELETE FROM trips WHERE id = $1", trip_id)
+    # Delete dependent records first, then the trip
+    await db.execute("DELETE FROM gps_points WHERE trip_id = ?", (trip_id,))
+    await db.execute("DELETE FROM anomalies WHERE trip_id = ?", (trip_id,))
+    await db.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+    await db.commit()
 
     return {"message": "Trip deleted successfully"}
