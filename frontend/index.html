@@ -158,9 +158,12 @@
     </div>
 
     <!-- ── Scripts ─────────────────────────────────── -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        onerror="console.error('Leaflet CDN failed to load. Maps will be unavailable.')">
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script id="gsi-script" src="https://accounts.google.com/gsi/client" async defer
+        onerror="console.warn('Google Sign-In script failed to load. Google login will be unavailable.')"></script>
 
     <!-- Global 3D Background -->
     <script type="module" src="/js/background.js"></script>

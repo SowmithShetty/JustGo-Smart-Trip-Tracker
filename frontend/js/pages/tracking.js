@@ -256,9 +256,45 @@ export function cleanup() {
 
 // ── Map ──────────────────────────────────────────────────
 
+function showTrackingError(message) {
+    const mapEl = document.getElementById('tracking-map');
+    if (!mapEl) return;
+    // Avoid duplicate banners
+    if (mapEl.querySelector('.gps-error-banner')) return;
+    const banner = document.createElement('div');
+    banner.className = 'gps-error-banner';
+    banner.style.cssText = [
+        'position:absolute', 'top:50%', 'left:50%',
+        'transform:translate(-50%,-50%)',
+        'background:rgba(20,5,10,0.92)',
+        'border:1px solid var(--neon-magenta)',
+        'border-radius:12px',
+        'padding:1.25rem 2rem',
+        'text-align:center',
+        'z-index:9999',
+        'max-width:90%',
+        'box-shadow:0 0 32px rgba(255,0,127,0.35)',
+    ].join(';');
+    banner.innerHTML = `
+        <div style="font-size:2rem;margin-bottom:0.5rem;">📍</div>
+        <p style="color:var(--neon-magenta);font-weight:600;margin:0 0 0.25rem;">
+            Location Access Required
+        </p>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin:0;">${message}</p>
+        <p style="color:var(--text-muted);font-size:0.75rem;margin:0.5rem 0 0;">Enable location in your browser settings, then refresh.</p>
+    `;
+    mapEl.style.position = 'relative';
+    mapEl.appendChild(banner);
+}
+
 function initMap(theme) {
     const mapEl = document.getElementById('tracking-map');
-    if (!mapEl || typeof L === 'undefined') return;
+    if (!mapEl) return;
+
+    if (typeof L === 'undefined') {
+        showTrackingError('Map library failed to load. Check your internet connection and refresh.');
+        return;
+    }
 
     map = L.map(mapEl, { zoomControl: false }).setView([20, 0], 2);
 
@@ -348,7 +384,10 @@ function startTracking(mode, theme) {
                 if (stepEl) stepEl.textContent = t.stepCount.toLocaleString();
             }
         },
-        (msg) => console.error('GPS Error:', msg),
+        (msg) => {
+            console.error('GPS Error:', msg);
+            showTrackingError(msg);
+        },
         mode
     );
     tracker.start();

@@ -208,7 +208,11 @@ async function apiCall(method, path, body = null, _attempt = 0) {
         }
         if (err.message === 'Failed to fetch') {
             emitStatus('', 'error');
-            throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const hint = isLocal 
+                ? 'Cannot connect to backend server. Ensure the backend is running (cd backend && python -m uvicorn main:app --reload --port 8000).'
+                : 'Cannot connect to server. The server may be waking up or your internet connection is offline.';
+            throw new Error(hint);
         }
 
         emitStatus('', 'error');

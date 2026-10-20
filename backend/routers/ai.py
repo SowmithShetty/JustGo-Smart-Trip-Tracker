@@ -124,6 +124,55 @@ IMPORTANT RULES:
     return prompt
 
 
+def _generate_fallback_coaching(trip: dict, points: list, anomalies: list) -> dict:
+    """Generate high-quality rule-based coaching when Gemini API is unavailable or invalid."""
+    mode = trip.get("mode", "walk")
+    dist = trip.get("total_distance_km", 0)
+    avg_spd = trip.get("avg_speed_kmh", 0)
+    max_spd = trip.get("max_speed_kmh", 0)
+    duration_s = trip.get("duration_seconds", 0)
+
+    # Format duration
+    mins = duration_s // 60
+    secs = duration_s % 60
+    time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+
+    performance = (
+        f"You logged a {dist:.2f} km {mode} in {time_str} with an average speed of {avg_spd:.1f} km/h "
+        f"and reached a peak speed of {max_spd:.1f} km/h. Solid effort completing this trip!"
+    )
+
+    if avg_spd > 0 and mode != "drive":
+        pace_min = (duration_s / 60) / max(dist, 0.01)
+        pace_str = f"{int(pace_min)}:{int((pace_min % 1) * 60):02d} min/km"
+        pace = f"Your average pace was {pace_str}. Speed consistency was maintained across the route."
+    else:
+        pace = f"Average travel speed was {avg_spd:.1f} km/h with consistent rhythm across recorded checkpoints."
+
+    if anomalies and len(anomalies) > 0:
+        slowdowns = f"Recorded {len(anomalies)} speed anomaly or slowdown segment(s), likely from traffic signals, turns, or brief rest stops."
+    else:
+        slowdowns = "Zero significant slowdowns detected along your route — smooth, continuous momentum throughout!"
+
+    if mode == "walk":
+        tips = "Incorporate 2-minute power walking intervals to elevate heart rate and maximize cardiovascular benefits."
+    elif mode == "run":
+        tips = "Focus on a consistent cadence (around 165-175 SPM) and maintain controlled breathing across elevations."
+    else:
+        tips = "Smooth accelerator modulation and anticipation of stops improves efficiency and reduces vehicle wear."
+
+    next_dist = round(dist * 1.15, 1) if dist > 0 else 2.0
+    goal = f"Aim for {next_dist} km on your next {mode} session to keep building endurance!"
+
+    return {
+        "performance": performance,
+        "pace": pace,
+        "slowdowns": slowdowns,
+        "tips": tips,
+        "goal": goal,
+    }
+
+
 # ── AI Coaching Endpoint ─────────────────────────────
 
 @router.get("/coach/{trip_id}")
@@ -134,20 +183,14 @@ async def get_ai_coaching(
 ):
     """
     Generate AI coaching insights for a specific trip.
-    Uses Google Gemini 2.0 Flash to analyze trip data.
+    Uses Google Gemini 2.0 Flash to analyze trip data with offline analytics fallback.
     """
     user_id = extract_token(authorization)
 
     # Rate limit check
     _check_rate_limit(user_id)
 
-    # Check for API key
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="AI coaching is not configured. The GEMINI_API_KEY environment variable is missing."
-        )
 
     # Fetch trip
     cursor = await db.execute(
@@ -209,6 +252,15 @@ async def get_ai_coaching(
     # Build prompt
     prompt = _build_coaching_prompt(trip_data, points, anomalies)
 
+    # If API key is not configured, return rule-based analytics
+    if not api_key:
+        return {
+            "trip_id": trip_id,
+            "coaching": _generate_fallback_coaching(trip_data, points, anomalies),
+            "model": "offline-analyst",
+            "warning": "Generated using built-in analytics engine (Gemini API key is not configured).",
+        }
+
     # Call Gemini API
     try:
         from google import genai
@@ -263,15 +315,13 @@ async def get_ai_coaching(
         }
     except Exception as e:
         error_msg = str(e)
-        if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
-            raise HTTPException(
-                status_code=429,
-                detail="AI rate limit reached. Please wait a moment and try again."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI coaching failed: {error_msg}"
-        )
+        print(f"[AI Coaching] Gemini API error: {error_msg}. Falling back to offline engine.")
+        return {
+            "trip_id": trip_id,
+            "coaching": _generate_fallback_coaching(trip_data, points, anomalies),
+            "model": "offline-analyst",
+            "warning": f"Generated using built-in analytics engine (Gemini API: {error_msg[:120]}).",
+        }
 
 
 # ── AI Analysis for Unsaved Trips ────────────────────
@@ -292,11 +342,6 @@ async def analyze_raw_trip(
     _check_rate_limit(user_id)
 
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="AI coaching is not configured. The GEMINI_API_KEY environment variable is missing."
-        )
 
     # Convert GPS points to dicts
     points_dicts = [
@@ -319,7 +364,7 @@ async def analyze_raw_trip(
     stats = analysis["stats"]
     anomalies = analysis.get("anomalies", [])
 
-    # Build trip dict for the prompt
+    # Build trip dict for the prompt and fallback
     trip_data = {
         "mode": data.mode,
         "total_distance_km": stats["total_distance_km"],
@@ -329,6 +374,16 @@ async def analyze_raw_trip(
         "started_at": data.started_at,
         "ended_at": data.ended_at,
     }
+
+    # If API key is missing, return offline rule-based coaching immediately
+    if not api_key:
+        return {
+            "coaching": _generate_fallback_coaching(trip_data, points_dicts, anomalies),
+            "stats": stats,
+            "anomalies": anomalies,
+            "model": "offline-analyst",
+            "warning": "Generated using built-in analytics engine (Gemini API key is not configured).",
+        }
 
     # Build and call Gemini
     prompt = _build_coaching_prompt(trip_data, points_dicts, anomalies)
@@ -387,12 +442,11 @@ async def analyze_raw_trip(
         }
     except Exception as e:
         error_msg = str(e)
-        if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
-            raise HTTPException(
-                status_code=429,
-                detail="AI rate limit reached. Please wait a moment and try again."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI analysis failed: {error_msg}"
-        )
+        print(f"[AI Raw Analysis] Gemini API error: {error_msg}. Falling back to offline engine.")
+        return {
+            "coaching": _generate_fallback_coaching(trip_data, points_dicts, anomalies),
+            "stats": stats,
+            "anomalies": anomalies,
+            "model": "offline-analyst",
+            "warning": f"Generated using built-in analytics engine (Gemini API: {error_msg[:120]}).",
+        }

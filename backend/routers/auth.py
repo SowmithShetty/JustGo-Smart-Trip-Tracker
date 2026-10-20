@@ -281,8 +281,15 @@ async def google_login(login_data: GoogleLogin, db: aiosqlite.Connection = Depen
         )
         
     except ValueError as e:
-        # Invalid token
+        # Invalid token or audience mismatch
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid Google token: {str(e)}",
+            detail=f"Google authentication failed: {str(e)}. Please ensure GOOGLE_CLIENT_ID matches your Google Cloud Console configuration.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google sign-in error: {str(e)}",
         )

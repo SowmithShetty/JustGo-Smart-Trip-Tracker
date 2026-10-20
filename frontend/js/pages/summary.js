@@ -774,7 +774,29 @@ function renderAICoaching(mount, coaching) {
 
 function renderSummaryMap(points) {
     const el = document.getElementById('summary-map');
-    if (!el || typeof L === 'undefined' || points.length < 2) return;
+    if (!el) return;
+
+    if (typeof L === 'undefined') {
+        el.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-secondary); text-align:center; padding:1.5rem;">
+                <p style="font-size:2rem; margin-bottom:0.5rem;">🗺️</p>
+                <p style="font-weight:600; color:var(--text-primary); margin-bottom:0.25rem;">Map Library Unavailable</p>
+                <p style="font-size:0.8rem; margin:0; color:var(--text-muted);">The Leaflet map script could not be loaded. Please check your network connection and reload.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!points || points.length < 2) {
+        el.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-secondary); text-align:center; padding:1.5rem;">
+                <p style="font-size:2rem; margin-bottom:0.5rem;">📍</p>
+                <p style="font-weight:600; color:var(--text-primary); margin-bottom:0.25rem;">Insufficient Route Coordinates</p>
+                <p style="font-size:0.8rem; margin:0; color:var(--text-muted);">Need at least 2 GPS coordinates to render your journey trajectory.</p>
+            </div>
+        `;
+        return;
+    }
 
     map = L.map(el, { zoomControl: false }).setView([points[0].latitude, points[0].longitude], 14);
 

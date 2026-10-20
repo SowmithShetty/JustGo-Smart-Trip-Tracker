@@ -141,15 +141,31 @@ function showAuthModal() {
     updatePasswordStrength('');
 
     // Initialize Google Sign-In
+    setupGoogleSignIn();
+}
+
+function setupGoogleSignIn() {
+    const googleBtn = document.getElementById("google-signin-btn");
+    if (!googleBtn) return;
+
     if (window.google && window.google.accounts) {
-        window.google.accounts.id.initialize({
-            client_id: "5347821434-t6jr98m948lf5p81mas61fqab2m2jebr.apps.googleusercontent.com",
-            callback: handleGoogleCallback
-        });
-        window.google.accounts.id.renderButton(
-            document.getElementById("google-signin-btn"),
-            { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: isRegisterMode ? "signup_with" : "signin_with" }
-        );
+        try {
+            const clientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID || "5347821434-t6jr98m948lf5p81mas61fqab2m2jebr.apps.googleusercontent.com";
+            window.google.accounts.id.initialize({
+                client_id: clientId,
+                callback: handleGoogleCallback
+            });
+            googleBtn.innerHTML = "";
+            window.google.accounts.id.renderButton(
+                googleBtn,
+                { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: isRegisterMode ? "signup_with" : "signin_with" }
+            );
+        } catch (err) {
+            console.warn('[Google Auth] Failed to initialize button:', err);
+            googleBtn.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Google Sign-In unavailable</span>';
+        }
+    } else {
+        googleBtn.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Google Sign-In script not loaded</span>';
     }
 }
 
@@ -232,13 +248,7 @@ function updateAuthMode() {
     }
 
     // Re-render Google button with correct text
-    if (window.google && window.google.accounts && document.getElementById("google-signin-btn").innerHTML !== "") {
-        document.getElementById("google-signin-btn").innerHTML = ""; // clear old button
-        window.google.accounts.id.renderButton(
-            document.getElementById("google-signin-btn"),
-            { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: isRegisterMode ? "signup_with" : "signin_with" }
-        );
-    }
+    setupGoogleSignIn();
 
     clearAllFieldErrors();
 }
